@@ -1,0 +1,43 @@
+# ---------- 密钥与环境变量（绝不提交）----------
+.env
+.env.local
+*.env.local
+
+# ---------- Go ----------
+leetnote-api/bin/
+*.exe
+*.test
+*.out
+coverage.out
+coverage.html
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---------- Node ----------
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+
+# ---------- IDE ----------
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ---------- 操作系统 ----------
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# ---------- 日志与临时文件 ----------
+*.log
+logs/
+*.tmp

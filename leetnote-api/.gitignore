@@ -1,0 +1,19 @@
+bin/
+*.exe
+*.test
+*.out
+coverage.out
+coverage.html
+
+# 环境变量（含密钥，绝不提交）
+.env
+.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# 日志
+*.log
+logs/
