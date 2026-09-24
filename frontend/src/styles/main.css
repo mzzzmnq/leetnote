@@ -1,0 +1,116 @@
+:root {
+  --ln-bg: #f7f8fa;
+  --ln-text: #1f2937;
+  --ln-text-muted: #6b7280;
+  --ln-border: #e5e7eb;
+  --ln-primary: #2f6fed;
+
+  font-family: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  line-height: 1.6;
+  color: var(--ln-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  min-height: 100vh;
+}
+
+body {
+  background: var(--ln-bg);
+}
+
+a {
+  color: var(--ln-primary);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* 认证页（登录/注册）共用的居中卡片布局 */
+.auth-page {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+  padding: 32px;
+  background: #fff;
+  border: 1px solid var(--ln-border);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgb(15 23 42 / 6%);
+}
+
+.auth-card__title {
+  margin: 0 0 4px;
+  font-size: 22px;
+}
+
+.auth-card__subtitle {
+  margin: 0 0 24px;
+  font-size: 14px;
+  color: var(--ln-text-muted);
+}
+
+.auth-card__footer {
+  margin-top: 20px;
+  font-size: 14px;
+  text-align: center;
+  color: var(--ln-text-muted);
+}
+
+/* 分隔线：中间带文字 */
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0;
+  font-size: 12px;
+  color: var(--ln-text-muted);
+}
+
+.divider::before,
+.divider::after {
+  flex: 1;
+  height: 1px;
+  background: var(--ln-border);
+  content: '';
+}
+
+.page {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.page__title {
+  margin: 0 0 4px;
+  font-size: 24px;
+}
+
+.page__subtitle {
+  margin: 0 0 24px;
+  color: var(--ln-text-muted);
+}
+
+.placeholder-card {
+  padding: 40px;
+  color: var(--ln-text-muted);
+  text-align: center;
+  background: #fff;
+  border: 1px dashed var(--ln-border);
+  border-radius: 12px;
+}

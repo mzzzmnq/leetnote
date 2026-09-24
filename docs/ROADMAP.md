@@ -136,6 +136,7 @@ leetnote-ai    (Python + FastAPI)  → RAG 相似题检索、LLM 解法讲解、
 - [x] **M1 完成**：`leetnote-api` Go 骨架跑通 —— 配置/日志/错误处理/统一响应/CORS/优雅关闭齐全，`/health` 返回 200
 - [x] **M2 完成**：认证模块 —— bcrypt 密码哈希、JWT 双 Token、鉴权中间件、注册/登录/刷新/登出 + `/users/me` 三个接口；含防账号枚举、防 alg 混淆、Cookie 安全属性
 - [x] **M2.5 完成**：GitHub OAuth 登录 —— state 防 CSRF（一次性 + 恒定时间比较）、按已验证邮箱关联已有账号、用户名冲突自动加后缀、防开放重定向、无密码账号禁止解绑；`oauth_accounts` 表 + `password_hash` 改为可空
+- [x] **M4 完成**：前端骨架 —— Vue 3 + TS + Vite + Pinia + Naive UI；登录/注册/GitHub 回调/概览/设置页；**401 单飞自动刷新**（并发只刷一次，独立 axios 实例防递归）；页面刷新后靠 refresh Cookie 自动恢复会话；`vue-tsc` 类型检查与生产构建均通过
 - [ ] **终端重启后验证**：`go version` / `psql --version` 能直接用
 - [ ] 数据库：LeetCode 数据库题库做 5 道（入门 JOIN）
 - [ ] 算法：滑动窗口专题收尾（209 / 3 / 1004 / 76 / 438）
