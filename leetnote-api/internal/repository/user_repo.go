@@ -22,6 +22,8 @@ type UserRepository interface {
 	GetByID(ctx context.Context, id int64) (*model.User, error)
 	// GetByLogin 支持用「用户名」或「邮箱」登录
 	GetByLogin(ctx context.Context, login string) (*model.User, error)
+	// GetByEmail 按邮箱精确查找（OAuth 首次登录时用于关联已有账号）
+	GetByEmail(ctx context.Context, email string) (*model.User, error)
 	UpdateProfile(ctx context.Context, id int64, avatarURL, bio *string) (*model.User, error)
 	UpdatePassword(ctx context.Context, id int64, passwordHash string) error
 }
@@ -98,6 +100,19 @@ func (r *userRepo) GetByLogin(ctx context.Context, login string) (*model.User, e
 	return u, nil
 }
 
+func (r *userRepo) GetByEmail(ctx context.Context, email string) (*model.User, error) {
+	const q = `SELECT ` + userColumns + ` FROM users WHERE lower(email) = lower($1) LIMIT 1`
+
+	u, err := scanUser(r.pool.QueryRow(ctx, q, email))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errs.ErrNotFound.WithMessage("用户不存在").Wrap(err)
+		}
+		return nil, fmt.Errorf("查询用户失败: %w", err)
+	}
+	return u, nil
+}
+
 func (r *userRepo) UpdateProfile(ctx context.Context, id int64, avatarURL, bio *string) (*model.User, error) {
 	// COALESCE：传 nil 表示「不修改该字段」，传空字符串才是「清空」
 	const q = `
@@ -130,6 +145,16 @@ func (r *userRepo) UpdatePassword(ctx context.Context, id int64, passwordHash st
 	return nil
 }
 
+// isUniqueViolation 判断错误是否为唯一约束冲突。
+// constraint 传空字符串表示「任意唯一约束」。
+func isUniqueViolation(err error, constraint string) bool {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		return false
+	}
+	return pgErr.Code == "23505" && (constraint == "" || pgErr.ConstraintName == constraint)
+}
+
 // translateUserError 把 PostgreSQL 的底层错误翻译成业务错误。
 //
 // 关键点：唯一约束冲突【不靠预先查询判断】，而是直接插入后捕获 23505。
@@ -142,9 +167,9 @@ func translateUserError(err error) error {
 		case "23505": // unique_violation
 			switch pgErr.ConstraintName {
 			case "users_username_key", "uq_users_username_lower":
-				return errs.ErrConflict.WithMessage("该用户名已被占用").Wrap(err)
+				return errs.ErrUsernameTaken.Wrap(err)
 			case "users_email_key", "uq_users_email_lower":
-				return errs.ErrConflict.WithMessage("该邮箱已被注册").Wrap(err)
+				return errs.ErrEmailTaken.Wrap(err)
 			default:
 				return errs.ErrConflict.Wrap(err)
 			}

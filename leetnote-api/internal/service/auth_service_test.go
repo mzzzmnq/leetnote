@@ -39,10 +39,10 @@ func (f *fakeUserRepo) Create(_ context.Context, u *model.User) error {
 	// 模拟数据库上的大小写不敏感唯一索引（uq_users_*_lower）
 	for _, existing := range f.users {
 		if strings.EqualFold(existing.Username, u.Username) {
-			return errs.ErrConflict.WithMessage("该用户名已被占用")
+			return errs.ErrUsernameTaken
 		}
 		if strings.EqualFold(existing.Email, u.Email) {
-			return errs.ErrConflict.WithMessage("该邮箱已被注册")
+			return errs.ErrEmailTaken
 		}
 	}
 
@@ -54,6 +54,19 @@ func (f *fakeUserRepo) Create(_ context.Context, u *model.User) error {
 	clone := *u
 	f.users[u.ID] = &clone
 	return nil
+}
+
+func (f *fakeUserRepo) GetByEmail(_ context.Context, email string) (*model.User, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	for _, u := range f.users {
+		if strings.EqualFold(u.Email, email) {
+			clone := *u
+			return &clone, nil
+		}
+	}
+	return nil, errs.ErrNotFound.WithMessage("用户不存在")
 }
 
 func (f *fakeUserRepo) GetByID(_ context.Context, id int64) (*model.User, error) {
@@ -107,7 +120,7 @@ func (f *fakeUserRepo) UpdatePassword(_ context.Context, id int64, passwordHash 
 	if !ok {
 		return errs.ErrNotFound.WithMessage("用户不存在")
 	}
-	u.PasswordHash = passwordHash
+	u.PasswordHash = &passwordHash
 	return nil
 }
 
@@ -140,8 +153,12 @@ func TestRegisterCreatesUserAndIssuesTokens(t *testing.T) {
 	if result.User.ID == 0 {
 		t.Error("应回填用户 ID")
 	}
-	if result.User.PasswordHash == "" || result.User.PasswordHash == "supersecret123" {
+	if result.User.PasswordHash == nil || *result.User.PasswordHash == "" ||
+		*result.User.PasswordHash == "supersecret123" {
 		t.Error("密码必须是哈希后的值，不能明文存储")
+	}
+	if !result.User.HasPassword() {
+		t.Error("本地注册用户应当有密码")
 	}
 	if result.User.Email != "cao@example.com" {
 		t.Errorf("邮箱应归一化为小写, 实际 %s", result.User.Email)
@@ -164,7 +181,7 @@ func TestRegisterRejectsDuplicateUsername(t *testing.T) {
 
 	dup := validRegisterInput()
 	dup.Email = "another@example.com" // 只让用户名冲突
-	if _, err := svc.Register(ctx, dup); !errors.Is(err, errs.ErrConflict) {
+	if _, err := svc.Register(ctx, dup); !errors.Is(err, errs.ErrUsernameTaken) {
 		t.Fatalf("重复用户名应返回冲突错误, 实际 %v", err)
 	}
 }
@@ -181,7 +198,7 @@ func TestRegisterTreatsUsernameCaseInsensitively(t *testing.T) {
 	dup.Username = "caolingyun" // 仅大小写不同
 	dup.Email = "another@example.com"
 
-	if _, err := svc.Register(ctx, dup); !errors.Is(err, errs.ErrConflict) {
+	if _, err := svc.Register(ctx, dup); !errors.Is(err, errs.ErrUsernameTaken) {
 		t.Fatalf("大小写不同的同名用户应被拒绝, 实际 %v", err)
 	}
 }

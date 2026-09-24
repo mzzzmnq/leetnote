@@ -46,7 +46,7 @@ func (s *AuthService) Register(ctx context.Context, in dto.RegisterInput) (*Auth
 	u := &model.User{
 		Username:     in.Username, // 保留原始大小写用于展示
 		Email:        strings.ToLower(in.Email),
-		PasswordHash: passwordHash,
+		PasswordHash: &passwordHash,
 	}
 
 	// 【不预先查询用户名是否已存在】——那会产生竞态：
@@ -56,7 +56,7 @@ func (s *AuthService) Register(ctx context.Context, in dto.RegisterInput) (*Auth
 		return nil, err
 	}
 
-	return s.issue(u)
+	return issueTokens(s.tokens, u)
 }
 
 // Login 校验凭证并签发 Token。
@@ -72,11 +72,22 @@ func (s *AuthService) Login(ctx context.Context, in dto.LoginInput) (*AuthResult
 		return nil, err
 	}
 
-	if !hash.VerifyPassword(u.PasswordHash, in.Password) {
+	// 纯 OAuth 用户没有密码，用密码登录必然失败。
+	//
+	// 【刻意的取舍】这里返回了区别于「密码错误」的提示，会泄漏
+	// 「该账号存在且用第三方登录」这一信息。但如果不提示，用户会
+	// 完全摸不着头脑。对本项目而言 UX 更重要，故选择提示。
+	// 若把防枚举放在第一位，改成和 errInvalidCredentials() 一致即可。
+	if !u.HasPassword() {
+		return nil, errs.ErrUnauthorized.WithMessage(
+			"该账号使用第三方登录，请点击「使用 GitHub 登录」")
+	}
+
+	if !hash.VerifyPassword(*u.PasswordHash, in.Password) {
 		return nil, errInvalidCredentials()
 	}
 
-	return s.issue(u)
+	return issueTokens(s.tokens, u)
 }
 
 // Refresh 用 refresh token 换一对新 Token（同时轮换 refresh token）。
@@ -97,11 +108,12 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*AuthRe
 		return nil, err
 	}
 
-	return s.issue(u)
+	return issueTokens(s.tokens, u)
 }
 
-func (s *AuthService) issue(u *model.User) (*AuthResult, error) {
-	pair, err := s.tokens.GeneratePair(u.ID)
+// issueTokens 是 AuthService 与 OAuthService 共用的签发逻辑。
+func issueTokens(tokens *jwt.Manager, u *model.User) (*AuthResult, error) {
+	pair, err := tokens.GeneratePair(u.ID)
 	if err != nil {
 		return nil, errs.ErrInternal.Wrap(err)
 	}

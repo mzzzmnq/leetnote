@@ -90,5 +90,10 @@ var (
 	ErrConflict     = &AppError{Code: "CONFLICT", Message: "资源已存在", HTTPStatus: http.StatusConflict}
 	ErrTooManyReqs  = &AppError{Code: "TOO_MANY_REQUESTS", Message: "请求过于频繁，请稍后再试", HTTPStatus: http.StatusTooManyRequests}
 
+	// 细分的冲突错误码：前端可以据此把提示定位到具体表单字段，
+	// service 层也能靠错误码区分「用户名冲突」和「邮箱冲突」并采取不同策略。
+	ErrUsernameTaken = &AppError{Code: "USERNAME_TAKEN", Message: "该用户名已被占用", HTTPStatus: http.StatusConflict}
+	ErrEmailTaken    = &AppError{Code: "EMAIL_TAKEN", Message: "该邮箱已被注册", HTTPStatus: http.StatusConflict}
+
 	ErrRouteNotFound = &AppError{Code: "ROUTE_NOT_FOUND", Message: "接口不存在", HTTPStatus: http.StatusNotFound}
 )

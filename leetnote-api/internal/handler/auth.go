@@ -43,7 +43,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	h.setRefreshCookie(c, result.Tokens)
+	setRefreshCookie(c, h.cfg, result.Tokens)
 	response.Created(c, h.buildAuthResponse(result))
 }
 
@@ -60,7 +60,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	h.setRefreshCookie(c, result.Tokens)
+	setRefreshCookie(c, h.cfg, result.Tokens)
 	response.OK(c, h.buildAuthResponse(result))
 }
 
@@ -77,12 +77,12 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 	result, err := h.svc.Refresh(c.Request.Context(), token)
 	if err != nil {
 		// refresh token 无效就顺手清掉，避免前端反复拿着废 token 重试
-		h.clearRefreshCookie(c)
+		clearRefreshCookie(c, h.cfg)
 		response.Fail(c, err)
 		return
 	}
 
-	h.setRefreshCookie(c, result.Tokens)
+	setRefreshCookie(c, h.cfg, result.Tokens)
 	response.OK(c, h.buildAuthResponse(result))
 }
 
@@ -96,7 +96,7 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 // 要做到「立即失效」需要引入 Redis 黑名单（把 jti 存进去），
 // 这是 M8 的优化项。
 func (h *AuthHandler) Logout(c *gin.Context) {
-	h.clearRefreshCookie(c)
+	clearRefreshCookie(c, h.cfg)
 	response.NoContent(c)
 }
 
@@ -116,26 +116,26 @@ func (h *AuthHandler) buildAuthResponse(r *service.AuthResult) dto.AuthResponse 
 //   - Secure    : 生产环境只在 HTTPS 上传输
 //   - SameSite  : Lax 表示跨站请求不带 Cookie，缓解 CSRF
 //   - Path 限定 : 只在 /api/v1/auth 下携带，减少暴露面
-func (h *AuthHandler) setRefreshCookie(c *gin.Context, pair *jwt.TokenPair) {
+func setRefreshCookie(c *gin.Context, cfg *config.Config, pair *jwt.TokenPair) {
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     refreshCookieName,
 		Value:    pair.RefreshToken,
 		Path:     refreshCookiePath,
 		MaxAge:   int(time.Until(pair.RefreshExpiresAt).Seconds()),
 		HttpOnly: true,
-		Secure:   h.cfg.IsProduction(),
+		Secure:   cfg.IsProduction(),
 		SameSite: http.SameSiteLaxMode,
 	})
 }
 
-func (h *AuthHandler) clearRefreshCookie(c *gin.Context) {
+func clearRefreshCookie(c *gin.Context, cfg *config.Config) {
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     refreshCookieName,
 		Value:    "",
 		Path:     refreshCookiePath,
 		MaxAge:   -1, // 负数表示立即删除
 		HttpOnly: true,
-		Secure:   h.cfg.IsProduction(),
+		Secure:   cfg.IsProduction(),
 		SameSite: http.SameSiteLaxMode,
 	})
 }

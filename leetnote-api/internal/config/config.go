@@ -23,6 +23,14 @@ type Config struct {
 
 	AIGRPCAddr  string   `envconfig:"AI_GRPC_ADDR" default:"localhost:9090"`
 	CORSOrigins []string `envconfig:"CORS_ORIGINS" default:"http://localhost:5173"`
+
+	// FrontendURL 用于 OAuth 回调后跳回前端
+	FrontendURL string `envconfig:"FRONTEND_URL" default:"http://localhost:5173"`
+
+	// GitHub OAuth（留空则关闭该登录方式）
+	GitHubClientID     string `envconfig:"GITHUB_CLIENT_ID"`
+	GitHubClientSecret string `envconfig:"GITHUB_CLIENT_SECRET"`
+	GitHubRedirectURL  string `envconfig:"GITHUB_REDIRECT_URL" default:"http://localhost:8080/api/v1/auth/github/callback"`
 }
 
 // IsProduction 用于判断是否开启 JSON 日志、Gin Release 模式等。

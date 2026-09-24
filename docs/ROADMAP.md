@@ -134,7 +134,8 @@ leetnote-ai    (Python + FastAPI)  → RAG 相似题检索、LLM 解法讲解、
 - [x] **数据库**：8 张表已通过 `migrations/000001_init.up.sql` 建好，索引齐全
 - [x] **连通性**：已用 Go + pgx 实测连库查询通过
 - [x] **M1 完成**：`leetnote-api` Go 骨架跑通 —— 配置/日志/错误处理/统一响应/CORS/优雅关闭齐全，`/health` 返回 200
-- [x] **M2 完成**：认证模块 —— bcrypt 密码哈希、JWT 双 Token、鉴权中间件、注册/登录/刷新/登出 + `/users/me` 三个接口；含防账号枚举、防 alg 混淆、Cookie 安全属性；测试覆盖率 router 99.3% / service 81.6% / jwt 87.8% / hash 90.9%
+- [x] **M2 完成**：认证模块 —— bcrypt 密码哈希、JWT 双 Token、鉴权中间件、注册/登录/刷新/登出 + `/users/me` 三个接口；含防账号枚举、防 alg 混淆、Cookie 安全属性
+- [x] **M2.5 完成**：GitHub OAuth 登录 —— state 防 CSRF（一次性 + 恒定时间比较）、按已验证邮箱关联已有账号、用户名冲突自动加后缀、防开放重定向、无密码账号禁止解绑；`oauth_accounts` 表 + `password_hash` 改为可空
 - [ ] **终端重启后验证**：`go version` / `psql --version` 能直接用
 - [ ] 数据库：LeetCode 数据库题库做 5 道（入门 JOIN）
 - [ ] 算法：滑动窗口专题收尾（209 / 3 / 1004 / 76 / 438）

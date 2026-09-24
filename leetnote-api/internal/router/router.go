@@ -7,6 +7,7 @@ import (
 	"github.com/mzzzmnq/leetnote-api/internal/config"
 	"github.com/mzzzmnq/leetnote-api/internal/handler"
 	"github.com/mzzzmnq/leetnote-api/internal/middleware"
+	"github.com/mzzzmnq/leetnote-api/internal/oauth"
 	"github.com/mzzzmnq/leetnote-api/internal/pkg/errs"
 	"github.com/mzzzmnq/leetnote-api/internal/pkg/jwt"
 	"github.com/mzzzmnq/leetnote-api/internal/pkg/response"
@@ -39,12 +40,18 @@ func New(cfg *config.Config, pool *pgxpool.Pool) *gin.Engine {
 	tokenManager := jwt.NewManager(cfg.JWTSecret, cfg.AccessTTL, cfg.RefreshTTL)
 
 	userRepo := repository.NewUserRepository(pool)
+	oauthRepo := repository.NewOAuthRepository(pool)
+
+	githubClient := oauth.NewGitHubClient(
+		cfg.GitHubClientID, cfg.GitHubClientSecret, cfg.GitHubRedirectURL)
 
 	authSvc := service.NewAuthService(userRepo, tokenManager)
 	userSvc := service.NewUserService(userRepo)
+	oauthSvc := service.NewOAuthService(userRepo, oauthRepo, githubClient, tokenManager)
 
 	authHandler := handler.NewAuthHandler(authSvc, cfg)
 	userHandler := handler.NewUserHandler(userSvc)
+	oauthHandler := handler.NewOAuthHandler(oauthSvc, cfg)
 	healthHandler := handler.NewHealthHandler(pool)
 
 	// ---------- 全局中间件 ----------
@@ -74,6 +81,12 @@ func New(cfg *config.Config, pool *pgxpool.Pool) *gin.Engine {
 		auth.POST("/login", authHandler.Login)
 		auth.POST("/refresh", authHandler.Refresh)
 		auth.POST("/logout", authHandler.Logout)
+
+		// GitHub OAuth
+		//   authorize: 前端拿授权地址
+		//   callback : GitHub 授权后浏览器跳转过来的地址（返回 302，不是 JSON）
+		auth.GET("/github/authorize", oauthHandler.Authorize)
+		auth.GET("/github/callback", oauthHandler.Callback)
 	}
 
 	// 需要登录的接口
@@ -84,6 +97,10 @@ func New(cfg *config.Config, pool *pgxpool.Pool) *gin.Engine {
 			users.GET("/me", userHandler.Me)
 			users.PATCH("/me", userHandler.UpdateMe)
 			users.POST("/me/password", userHandler.ChangePassword)
+
+			// 第三方账号绑定管理
+			users.GET("/me/oauth-accounts", oauthHandler.LinkedAccounts)
+			users.DELETE("/me/oauth-accounts/github", oauthHandler.Unlink)
 		}
 	}
 

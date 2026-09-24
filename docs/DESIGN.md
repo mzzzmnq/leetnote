@@ -198,7 +198,7 @@ flowchart LR
 - [ ] **知识点图谱 + GraphRAG**（借力图算法科研）
 - [ ] 一键导入 LeetCode 题目元数据（用开源数据集，不爬站）
 - [ ] 图片上传（粘贴截图）
-- [ ] GitHub OAuth 登录
+- [x] **GitHub OAuth 登录**（支持账号关联与解绑）
 - [ ] Redis 缓存热榜 / 接口限流
 
 ### 里程碑
@@ -390,6 +390,23 @@ CREATE TABLE review_logs (
     reviewed_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_review_logs_card ON review_logs (card_id, reviewed_at DESC);
+
+-- ============ 第三方账号关联（GitHub OAuth） ============
+-- password_hash 改为可空：OAuth 注册的用户没有密码
+ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
+
+CREATE TABLE oauth_accounts (
+    id             BIGSERIAL PRIMARY KEY,
+    user_id        BIGINT       NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider       VARCHAR(20)  NOT NULL,   -- github
+    provider_uid   VARCHAR(100) NOT NULL,   -- provider 侧用户唯一 ID
+    provider_login VARCHAR(100),            -- provider 侧登录名（展示用）
+    avatar_url     TEXT,
+    created_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CONSTRAINT uq_oauth_provider_uid UNIQUE (provider, provider_uid)
+);
+CREATE INDEX idx_oauth_accounts_user ON oauth_accounts (user_id);
 ```
 
 ### 5.3 中文全文检索
@@ -633,6 +650,48 @@ due_at = now() + interval_days 天
 | POST | `/ai/embed` | 重建笔记向量（内部/管理用） |
 | GET | `/ai/graph/related?tag=动态规划` | 知识点图谱关联（GraphRAG） |
 | POST | `/ai/review-card` | 根据笔记生成复习卡问题 |
+
+#### 第三方登录 `/auth/github` 🟦
+
+| 方法 | 路径 | 说明 | 鉴权 |
+|---|---|---|---|
+| GET | `/auth/github/authorize` | 返回授权地址（服务端生成 state） | ✗ |
+| GET | `/auth/github/callback` | GitHub 授权后浏览器跳转至此（302 回前端） | ✗ |
+| GET | `/users/me/oauth-accounts` | 查询已绑定的第三方账号 | ✓ |
+| DELETE | `/users/me/oauth-accounts/github` | 解绑 GitHub（无密码账号禁止解绑） | ✓ |
+
+**OAuth 登录流程**
+
+```mermaid
+sequenceDiagram
+    participant U as 用户
+    participant F as Vue 前端
+    participant G as leetnote-api (Go)
+    participant GH as GitHub
+
+    U->>F: 点击「使用 GitHub 登录」
+    F->>G: GET /auth/github/authorize
+    G->>G: 生成随机 state，写入 httpOnly Cookie
+    G-->>F: { authorize_url }
+    F->>GH: 跳转到 authorize_url
+    U->>GH: 授权
+    GH->>G: 302 回调 ?code=xxx&state=xxx
+    G->>G: 比对 state（一次性，恒定时间比较）
+    G->>GH: POST /login/oauth/access_token
+    GH-->>G: access_token
+    G->>GH: GET /user + /user/emails
+    GH-->>G: 用户信息（含已验证邮箱）
+    G->>G: 已关联→登录 / 邮箱命中→关联 / 否则→建号
+    G-->>F: 302 回前端 + 下发 refresh Cookie
+    F->>G: POST /auth/refresh 换取 access_token
+```
+
+> **关键安全点**：
+> - `state` 防 CSRF，且**一次性使用**（用过即焚，防重放）
+> - 比对用 `subtle.ConstantTimeCompare`，避免时序侧信道
+> - **只认 GitHub 已验证的邮箱**，否则攻击者填别人的邮箱就能接管账号
+> - **token 绝不放进跳转 URL**（会进浏览器历史 / Referer / 服务器日志），改为下发 httpOnly Cookie
+> - `redirect` 参数只接受站内相对路径，防开放重定向
 
 ### 6.3 gRPC 契约（Go ↔ Python）
 

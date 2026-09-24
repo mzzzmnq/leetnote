@@ -55,10 +55,10 @@ func TestChangePasswordSucceeds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("读取用户失败: %v", err)
 	}
-	if !hash.VerifyPassword(u.PasswordHash, newPassword) {
+	if u.PasswordHash == nil || !hash.VerifyPassword(*u.PasswordHash, newPassword) {
 		t.Error("新密码应能校验通过")
 	}
-	if hash.VerifyPassword(u.PasswordHash, originalPassword) {
+	if hash.VerifyPassword(*u.PasswordHash, originalPassword) {
 		t.Error("旧密码应已失效")
 	}
 }
@@ -77,7 +77,7 @@ func TestChangePasswordRejectsWrongOldPassword(t *testing.T) {
 
 	// 校验失败时绝不能改动密码
 	u, _ := repo.GetByID(ctx, id)
-	if !hash.VerifyPassword(u.PasswordHash, originalPassword) {
+	if !hash.VerifyPassword(*u.PasswordHash, originalPassword) {
 		t.Error("校验失败时不应修改密码")
 	}
 }
