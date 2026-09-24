@@ -185,36 +185,97 @@ go run main.go                # 能跑通即可
 
 ---
 
-## 7. GitHub 访问与代理（重要）
+## 7. GitHub 访问（重要）
 
-国内直连 GitHub 会**连接被重置**（`Recv failure: Connection was reset`），必须走代理。
+国内直连 GitHub 会被阻断。本机**已配置 SSH over 443**，日常 git 操作**不需要代理**。
 
-本机已用 **Clash Verge**（端口 `7897`）解决：
+### 7.1 首选方案：SSH over 443
+
+**原理**：阻断发生在 SNI/DPI 层（实测：DNS 正常、用真实 IP 直连也失败，所以改 hosts 没用）。
+GitHub 官方提供 `ssh.github.com:443` 作为备用入口——**SSH 协议不带 SNI 域名**，DPI 认不出目标，就放行了。
+
+**`~/.ssh/config`**（原文件备份在 `config.bak`）：
+
+```sshconfig
+Host github.com
+    HostName ssh.github.com     # 关键：走 443 入口
+    Port 443
+    User git
+    PreferredAuthentications publickey
+    IdentityFile ~/.ssh/id_ed25519_github
+    IdentitiesOnly yes
+    ServerAliveInterval 30
+    ServerAliveCountMax 3
+```
+
+**两个必须知道的坑**：
+
+**坑 1：Git 自带的 ssh 读不到配置**
+
+Git for Windows 用的是 `D:\Git\usr\bin\ssh.exe`（MSYS2 版），它依赖 `$HOME` 找
+`~/.ssh/config`。本机 `HOME` 为空，于是它**忽略配置、直连 22 端口**：
+
+```
+ssh: connect to host github.com port 22: Connection timed out
+```
+
+解法是让 git 显式使用 Windows 自带的 OpenSSH：
 
 ```powershell
+git config --global core.sshCommand "C:/Windows/System32/OpenSSH/ssh.exe"
+```
+
+**坑 2：私钥不能有 passphrase**
+
+如果私钥有 passphrase 而 `ssh-agent` 没运行，SSH 解不开私钥，
+会报 `Permission denied (publickey)`——**看起来像密钥没注册，实际是加载不了**。
+
+本机的 `id_ed25519_github` 是**无 passphrase** 的 ed25519 密钥，专供本机使用。
+
+> 为什么不修好带口令的旧密钥：启动 `ssh-agent` 要管理员权限，且 Windows 的 agent
+> **不跨重启保存密钥**，每次开机都得 `ssh-add`。无口令密钥才能真正"永久无感"。
+> 代价是机器被入侵时密钥可被直接使用——缓解方式是这把密钥只用于 GitHub，可随时在网页删除。
+
+**排查命令**：
+
+```powershell
+# 认证测试（成功会输出 Hi <用户名>! You've successfully authenticated）
+ssh -T git@github.com
+
+# 看 ssh 实际用了哪个配置（应显示 hostname ssh.github.com / port 443）
+ssh -G github.com | Select-String 'hostname|port|identityfile'
+
+# 对比：git 自带 ssh 是否忽略配置（若显示 port 22 说明踩到坑 1）
+D:\Git\usr\bin\ssh.exe -G github.com | Select-String 'hostname|port'
+
+# 查看远程分支（验证读权限）
+git ls-remote --heads origin
+```
+
+> `ssh.github.com:443` 会**间歇性被 reset**，重试即可通过。
+
+### 7.2 回退方案：HTTPS + 代理
+
+SSH 通道万一长期不可用，切回 HTTPS 并挂上 Clash：
+
+```powershell
+# 切回 HTTPS
+git remote set-url origin https://github.com/mzzzmnq/leetnote.git
+
 # 只对 github.com 生效，不影响 gitee 等国内仓库
 git config --global http.https://github.com.proxy http://127.0.0.1:7897
 ```
 
-**排查口诀**：先看代理端口有没有在监听，再对比直连与走代理的差异：
-
-```powershell
-# 1. 代理端口在不在
-Get-NetTCPConnection -LocalPort 7897 -State Listen
-
-# 2. 直连（预期 000 = 失败）
-curl.exe -s -o NUL -w "%{http_code}`n" --max-time 10 https://github.com
-
-# 3. 走代理（预期 200 = 成功）
-curl.exe -s -o NUL -w "%{http_code}`n" --max-time 15 --proxy http://127.0.0.1:7897 https://github.com
-```
-
 **注意事项**：
 
-- Clash 端口随版本变化（Clash Verge 新版是 `7897`，老版 Clash for Windows 是 `7890`），换版本后要同步改 git 配置
+- Clash 端口随版本变化（Clash Verge 新版是 `7897`，老版 Clash for Windows 是 `7890`）
 - **系统代理开关关着不影响 git**——git 用的是自己配置的代理，两者独立
-- 代理软件没开时 git 会失败，可临时取消：`git config --global --unset http.https://github.com.proxy`
-- 同理，`go get` 拉取托管在 GitHub 上的依赖也依赖代理；已配的 `GOPROXY=goproxy.cn` 会先兜住大部分情况
+- `go get` 拉取托管在 GitHub 的依赖也受此影响，但 `GOPROXY=goproxy.cn` 会先兜住大部分情况
+
+### 7.3 限制说明
+
+SSH over 443 **只解决 git 操作**（clone / pull / push）。
+浏览器访问 github.com（查文档、提 issue、用 Actions 界面）**仍然需要代理**。
 
 ---
 
@@ -222,10 +283,12 @@ curl.exe -s -o NUL -w "%{http_code}`n" --max-time 15 --proxy http://127.0.0.1:78
 
 | 项 | 值 |
 |---|---|
-| 地址 | https://github.com/mzzzmnq/leetnote |
+| 地址 | `git@github.com:mzzzmnq/leetnote.git`（SSH） |
+| 网页 | https://github.com/mzzzmnq/leetnote |
 | 可见性 | 公开 |
 | 默认分支 | `main` |
-| 凭据 | Git Credential Manager 管理，已缓存 |
+| 认证方式 | SSH 密钥 `~/.ssh/id_ed25519_github`（无口令） |
+| 代理依赖 | **无** |
 
 ```powershell
 cd D:\vibecoding_test\leetnote
