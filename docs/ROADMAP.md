@@ -133,7 +133,8 @@ leetnote-ai    (Python + FastAPI)  → RAG 相似题检索、LLM 解法讲解、
 - [x] **环境**：Go 1.27.1 + PostgreSQL 18.6 便携版已装在 `D:\dev`（详见 [`ENVIRONMENT.md`](./ENVIRONMENT.md)）
 - [x] **数据库**：8 张表已通过 `migrations/000001_init.up.sql` 建好，索引齐全
 - [x] **连通性**：已用 Go + pgx 实测连库查询通过
-- [x] **M1 完成**：`leetnote-api` Go 骨架跑通 —— 配置/日志/错误处理/统一响应/CORS/优雅关闭齐全，`/health` 返回 200，测试覆盖率 router 96.7%、errs 93.3%、response 93.3%
+- [x] **M1 完成**：`leetnote-api` Go 骨架跑通 —— 配置/日志/错误处理/统一响应/CORS/优雅关闭齐全，`/health` 返回 200
+- [x] **M2 完成**：认证模块 —— bcrypt 密码哈希、JWT 双 Token、鉴权中间件、注册/登录/刷新/登出 + `/users/me` 三个接口；含防账号枚举、防 alg 混淆、Cookie 安全属性；测试覆盖率 router 99.3% / service 81.6% / jwt 87.8% / hash 90.9%
 - [ ] **终端重启后验证**：`go version` / `psql --version` 能直接用
 - [ ] 数据库：LeetCode 数据库题库做 5 道（入门 JOIN）
 - [ ] 算法：滑动窗口专题收尾（209 / 3 / 1004 / 76 / 438）
@@ -145,7 +146,7 @@ leetnote-ai    (Python + FastAPI)  → RAG 相似题检索、LLM 解法讲解、
 | 周次 | 算法 | 计算机基础 | Go | 项目 |
 |---|---|---|---|---|
 | W1<br>10.05–10.11 | 滑动窗口收尾，累计 35 | 计网：HTTP 报文/方法/状态码 | Go 语法（变量/类型/流程/函数/指针） | ✅ M1 已完成（骨架/配置/日志/健康检查） |
-| W2<br>10.12–10.18 | 双指针（167/15/11/42），累计 45 | 计网：HTTPS 握手、TCP 三次/四次 | slice / map / struct / interface / error / defer | 分层结构 + 日志（slog/zap） |
+| W2<br>10.12–10.18 | 双指针（167/15/11/42），累计 45 | 计网：HTTPS 握手、TCP 三次/四次 | slice / map / struct / interface / error / defer | ✅ M2 已完成（认证/JWT/鉴权中间件） |
 | W3<br>10.19–10.25 | 二分（704/34/35/33/153），累计 55 | 计网：DNS、CDN、输入 URL 到渲染 | 方法与接口、泛型入门 | 连接 PostgreSQL（pgx/GORM） |
 | W4<br>10.26–11.01 | 二分进阶（4/875/1011），累计 65 | 计网：复习 + 整理笔记 | goroutine + channel 基础 | 数据模型 + golang-migrate 迁移 |
 | W5<br>11.02–11.08 | 链表（206/21/141/142/19），累计 75 | OS：进程 vs 线程、协程 | select / sync（Mutex/WaitGroup/Once） | 用户注册登录（bcrypt + JWT） |

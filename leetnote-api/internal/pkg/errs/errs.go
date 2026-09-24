@@ -30,6 +30,20 @@ func (e *AppError) Error() string {
 // Unwrap 让 errors.Is / errors.As 能穿透到底层错误。
 func (e *AppError) Unwrap() error { return e.Err }
 
+// Is 让 errors.Is 按【错误码】比较，而不是按指针。
+//
+// 为什么必须有：ErrNotFound 这类预定义变量是全局共享的，
+// Wrap / WithMessage 会派生出新对象。若不实现 Is，
+// errors.Is(derived, errs.ErrNotFound) 会因为指针不同而返回 false，
+// 调用方就再也判断不出错误类型了。
+func (e *AppError) Is(target error) bool {
+	t, ok := target.(*AppError)
+	if !ok {
+		return false
+	}
+	return e.Code == t.Code
+}
+
 // Wrap 返回一个附带了底层错误的副本（不修改原对象，避免全局变量被污染）。
 func (e *AppError) Wrap(err error) *AppError {
 	clone := *e

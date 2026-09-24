@@ -49,6 +49,9 @@ func newTestRouter(t *testing.T) *gin.Engine {
 	cfg := &config.Config{
 		AppEnv:      "test",
 		CORSOrigins: []string{"http://localhost:5173"},
+		JWTSecret:   "integration-test-secret-do-not-use-in-production",
+		AccessTTL:   15 * time.Minute,
+		RefreshTTL:  24 * time.Hour,
 	}
 	return router.New(cfg, testPool(t))
 }
