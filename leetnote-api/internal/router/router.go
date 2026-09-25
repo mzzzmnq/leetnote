@@ -45,6 +45,8 @@ func New(cfg *config.Config, pool *pgxpool.Pool) *gin.Engine {
 	tagRepo := repository.NewTagRepository(pool)
 	noteRepo := repository.NewNoteRepository(pool)
 	solutionRepo := repository.NewSolutionRepository(pool)
+	statsRepo := repository.NewStatsRepository(pool)
+	searchRepo := repository.NewSearchRepository(pool)
 
 	githubClient := oauth.NewGitHubClient(
 		cfg.GitHubClientID, cfg.GitHubClientSecret, cfg.GitHubRedirectURL)
@@ -55,6 +57,8 @@ func New(cfg *config.Config, pool *pgxpool.Pool) *gin.Engine {
 	problemSvc := service.NewProblemService(problemRepo)
 	tagSvc := service.NewTagService(tagRepo)
 	noteSvc := service.NewNoteService(pool, noteRepo, solutionRepo, tagRepo, problemRepo)
+	statsSvc := service.NewStatsService(statsRepo)
+	searchSvc := service.NewSearchService(searchRepo, tagRepo, problemRepo)
 
 	authHandler := handler.NewAuthHandler(authSvc, cfg)
 	userHandler := handler.NewUserHandler(userSvc)
@@ -62,6 +66,8 @@ func New(cfg *config.Config, pool *pgxpool.Pool) *gin.Engine {
 	problemHandler := handler.NewProblemHandler(problemSvc)
 	tagHandler := handler.NewTagHandler(tagSvc)
 	noteHandler := handler.NewNoteHandler(noteSvc)
+	statsHandler := handler.NewStatsHandler(statsSvc)
+	searchHandler := handler.NewSearchHandler(searchSvc)
 	healthHandler := handler.NewHealthHandler(pool)
 
 	// ---------- 全局中间件 ----------
@@ -151,6 +157,16 @@ func New(cfg *config.Config, pool *pgxpool.Pool) *gin.Engine {
 			solutions.PUT("/:id", noteHandler.UpdateSolution)
 			solutions.DELETE("/:id", noteHandler.DeleteSolution)
 		}
+
+		// 统计看板
+		stats := authed.Group("/stats")
+		{
+			stats.GET("/overview", statsHandler.Overview)
+			stats.GET("/trend", statsHandler.Trend)
+		}
+
+		// 全文检索（一次返回笔记 + 题目两类结果）
+		authed.GET("/search", searchHandler.Search)
 	}
 
 	// 未匹配路由统一走错误响应格式

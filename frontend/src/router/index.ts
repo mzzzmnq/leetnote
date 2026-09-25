@@ -76,6 +76,12 @@ const routes: RouteRecordRaw[] = [
         meta: { requiresAuth: true, title: '题目库' },
       },
       {
+        path: 'search',
+        name: 'search',
+        component: () => import('@/views/SearchView.vue'),
+        meta: { requiresAuth: true, title: '搜索' },
+      },
+      {
         path: 'settings',
         name: 'settings',
         component: () => import('@/views/SettingsView.vue'),

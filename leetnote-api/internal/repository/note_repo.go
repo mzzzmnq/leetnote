@@ -113,7 +113,7 @@ func (r *noteRepo) List(ctx context.Context, f NoteFilter) ([]*model.Note, int64
 	joins := ""
 
 	if kw := strings.TrimSpace(f.Keyword); kw != "" {
-		args = append(args, "%"+kw+"%")
+		args = append(args, likeContains(kw))
 		n := len(args)
 		conditions = append(conditions,
 			fmt.Sprintf("(n.title ILIKE $%d OR n.content_md ILIKE $%d)", n, n))

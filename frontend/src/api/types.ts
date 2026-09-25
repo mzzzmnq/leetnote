@@ -192,3 +192,48 @@ export interface ProblemQuery {
   size?: number
 }
 
+// ---------------------------------------------------------------
+// 统计与搜索
+// ---------------------------------------------------------------
+
+export interface DifficultyBreakdown {
+  easy: number
+  medium: number
+  hard: number
+}
+
+export interface StatsOverview {
+  total_notes: number
+  total_problems: number
+  total_solutions: number
+  total_tags: number
+  starred: number
+  drafts: number
+  /** 有记录的天数 */
+  active_days: number
+  /** 当前连续打卡天数 */
+  current_streak: number
+  /** 历史最长连续打卡 */
+  longest_streak: number
+  difficulty: DifficultyBreakdown
+}
+
+/** 趋势图上的一个点 */
+export interface TrendPoint {
+  /** YYYY-MM-DD */
+  date: string
+  count: number
+}
+
+export interface TrendResponse {
+  days: number
+  points: TrendPoint[]
+}
+
+/** 搜索结果：一次返回笔记与题目两类 */
+export interface SearchResponse {
+  keyword: string
+  notes: NoteListItem[]
+  problems: Problem[]
+}
+

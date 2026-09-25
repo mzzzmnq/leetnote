@@ -98,7 +98,7 @@ func (s *NoteService) GetByID(ctx context.Context, userID, id int64) (*model.Not
 		return nil, err
 	}
 
-	s.attachAssociations(ctx, []*model.Note{note})
+	enrichNotes(ctx, []*model.Note{note}, s.tags, s.problems)
 
 	if sols, err := s.solutions.ListByNoteID(ctx, note.ID); err == nil {
 		note.Solutions = sols
@@ -127,7 +127,7 @@ func (s *NoteService) List(ctx context.Context, userID int64, q dto.NoteQuery) (
 		return nil, 0, err
 	}
 
-	s.attachAssociations(ctx, notes)
+	enrichNotes(ctx, notes, s.tags, s.problems)
 	return notes, total, nil
 }
 
@@ -232,12 +232,19 @@ func (s *NoteService) DeleteSolution(ctx context.Context, userID, solutionID int
 
 // ---------------------------------------------------------------
 
-// attachAssociations 批量补齐列表项的题目与标签。
+// enrichNotes 批量补齐笔记的题目与标签。
 //
 // 【关键】用两次「按 ID 批量查」而不是循环里逐条查——
 // 后者就是典型的 N+1：20 条笔记会产生 1 + 20 + 20 = 41 次查询。
 // 现在固定是 3 次（列表 + 批量题目 + 批量标签），与条数无关。
-func (s *NoteService) attachAssociations(ctx context.Context, notes []*model.Note) {
+//
+// 抽成包级函数是为了让搜索模块也能复用同一套补齐逻辑。
+func enrichNotes(
+	ctx context.Context,
+	notes []*model.Note,
+	tags repository.TagRepository,
+	problems repository.ProblemRepository,
+) {
 	if len(notes) == 0 {
 		return
 	}
@@ -251,14 +258,14 @@ func (s *NoteService) attachAssociations(ctx context.Context, notes []*model.Not
 		}
 	}
 
-	if tagMap, err := s.tags.ListByNoteIDs(ctx, noteIDs); err == nil {
+	if tagMap, err := tags.ListByNoteIDs(ctx, noteIDs); err == nil {
 		for _, n := range notes {
 			n.Tags = tagMap[n.ID]
 		}
 	}
 
 	if len(problemIDs) > 0 {
-		if problemMap, err := s.problems.GetByIDs(ctx, problemIDs); err == nil {
+		if problemMap, err := problems.GetByIDs(ctx, problemIDs); err == nil {
 			for _, n := range notes {
 				if n.ProblemID != nil {
 					n.Problem = problemMap[*n.ProblemID]

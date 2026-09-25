@@ -127,7 +127,7 @@ func (r *problemRepo) List(ctx context.Context, f ProblemFilter) ([]*model.Probl
 	args := make([]any, 0, 4)
 
 	if kw := strings.TrimSpace(f.Keyword); kw != "" {
-		args = append(args, "%"+kw+"%")
+		args = append(args, likeContains(kw))
 		// 同一个占位符用两次（同一个值），所以 n 只自增一次
 		n := len(args)
 		conditions = append(conditions,
