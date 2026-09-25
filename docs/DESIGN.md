@@ -588,7 +588,7 @@ due_at = now() + interval_days 天
 | GET | `/problems` | 列表，支持 `keyword` `difficulty` 筛选 + 分页 |
 | GET | `/problems/{id}` | 详情 |
 | POST | `/problems` | 手动新增题目 |
-| PATCH | `/problems/{id}` | 修改 |
+| PUT | `/problems/{id}` | 全量修改 |
 | DELETE | `/problems/{id}` | 删除 |
 | POST | `/problems/import` | 批量导入（开源数据集） |
 
@@ -599,7 +599,7 @@ due_at = now() + interval_days 天
 | GET | `/notes` | 列表，支持 `keyword` `difficulty` `tag` `status` `starred` `sort` + 分页 |
 | GET | `/notes/{id}` | 详情（含解法、标签） |
 | POST | `/notes` | 新建 |
-| PATCH | `/notes/{id}` | 修改 |
+| PUT | `/notes/{id}` | 全量修改（含解法与标签） |
 | DELETE | `/notes/{id}` | 删除 |
 | POST | `/notes/{id}/star` | 切换收藏 |
 
@@ -609,7 +609,7 @@ due_at = now() + interval_days 天
 |---|---|---|
 | GET | `/notes/{note_id}/solutions` | 该笔记的全部解法 |
 | POST | `/notes/{note_id}/solutions` | 新增解法 |
-| PATCH | `/solutions/{id}` | 修改解法 |
+| PUT | `/solutions/{id}` | 修改解法 |
 | DELETE | `/solutions/{id}` | 删除解法 |
 
 #### 标签 `/tags` 🟦

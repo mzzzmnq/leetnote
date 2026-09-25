@@ -44,16 +44,20 @@ func testPool(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
-func newTestRouter(t *testing.T) *gin.Engine {
-	t.Helper()
-	cfg := &config.Config{
+// testConfig 返回测试用的完整配置。
+func testConfig() *config.Config {
+	return &config.Config{
 		AppEnv:      "test",
 		CORSOrigins: []string{"http://localhost:5173"},
 		JWTSecret:   "integration-test-secret-do-not-use-in-production",
 		AccessTTL:   15 * time.Minute,
 		RefreshTTL:  24 * time.Hour,
 	}
-	return router.New(cfg, testPool(t))
+}
+
+func newTestRouter(t *testing.T) *gin.Engine {
+	t.Helper()
+	return router.New(testConfig(), testPool(t))
 }
 
 func do(t *testing.T, r *gin.Engine, method, path string) *httptest.ResponseRecorder {

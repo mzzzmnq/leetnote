@@ -7,7 +7,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/mzzzmnq/leetnote-api/internal/model"
 	"github.com/mzzzmnq/leetnote-api/internal/pkg/errs"
@@ -29,11 +28,13 @@ type UserRepository interface {
 }
 
 type userRepo struct {
-	pool *pgxpool.Pool
+	db Querier
 }
 
-func NewUserRepository(pool *pgxpool.Pool) UserRepository {
-	return &userRepo{pool: pool}
+// NewUserRepository 接受 Querier —— 既能传连接池，也能传事务对象，
+// 所以同一个实现可以在事务内复用。
+func NewUserRepository(db Querier) UserRepository {
+	return &userRepo{db: db}
 }
 
 // 显式列出字段，绝不用 SELECT *。
@@ -58,7 +59,7 @@ func (r *userRepo) Create(ctx context.Context, u *model.User) error {
 		VALUES ($1, $2, $3)
 		RETURNING id, created_at, updated_at`
 
-	err := r.pool.QueryRow(ctx, q, u.Username, u.Email, u.PasswordHash).
+	err := r.db.QueryRow(ctx, q, u.Username, u.Email, u.PasswordHash).
 		Scan(&u.ID, &u.CreatedAt, &u.UpdatedAt)
 	if err != nil {
 		return translateUserError(err)
@@ -69,7 +70,7 @@ func (r *userRepo) Create(ctx context.Context, u *model.User) error {
 func (r *userRepo) GetByID(ctx context.Context, id int64) (*model.User, error) {
 	const q = `SELECT ` + userColumns + ` FROM users WHERE id = $1`
 
-	u, err := scanUser(r.pool.QueryRow(ctx, q, id))
+	u, err := scanUser(r.db.QueryRow(ctx, q, id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errs.ErrNotFound.WithMessage("用户不存在").Wrap(err)
@@ -88,7 +89,7 @@ func (r *userRepo) GetByLogin(ctx context.Context, login string) (*model.User, e
 		WHERE lower(username) = lower($1) OR lower(email) = lower($1)
 		LIMIT 1`
 
-	u, err := scanUser(r.pool.QueryRow(ctx, q, login))
+	u, err := scanUser(r.db.QueryRow(ctx, q, login))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// 注意：这里返回的是「不存在」，但 service 层会统一转成 401「用户名或密码错误」，
@@ -103,7 +104,7 @@ func (r *userRepo) GetByLogin(ctx context.Context, login string) (*model.User, e
 func (r *userRepo) GetByEmail(ctx context.Context, email string) (*model.User, error) {
 	const q = `SELECT ` + userColumns + ` FROM users WHERE lower(email) = lower($1) LIMIT 1`
 
-	u, err := scanUser(r.pool.QueryRow(ctx, q, email))
+	u, err := scanUser(r.db.QueryRow(ctx, q, email))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errs.ErrNotFound.WithMessage("用户不存在").Wrap(err)
@@ -122,7 +123,7 @@ func (r *userRepo) UpdateProfile(ctx context.Context, id int64, avatarURL, bio *
 		WHERE id = $1
 		RETURNING ` + userColumns
 
-	u, err := scanUser(r.pool.QueryRow(ctx, q, id, avatarURL, bio))
+	u, err := scanUser(r.db.QueryRow(ctx, q, id, avatarURL, bio))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errs.ErrNotFound.WithMessage("用户不存在").Wrap(err)
@@ -135,7 +136,7 @@ func (r *userRepo) UpdateProfile(ctx context.Context, id int64, avatarURL, bio *
 func (r *userRepo) UpdatePassword(ctx context.Context, id int64, passwordHash string) error {
 	const q = `UPDATE users SET password_hash = $2 WHERE id = $1`
 
-	tag, err := r.pool.Exec(ctx, q, id, passwordHash)
+	tag, err := r.db.Exec(ctx, q, id, passwordHash)
 	if err != nil {
 		return fmt.Errorf("更新密码失败: %w", err)
 	}
@@ -153,6 +154,16 @@ func isUniqueViolation(err error, constraint string) bool {
 		return false
 	}
 	return pgErr.Code == "23505" && (constraint == "" || pgErr.ConstraintName == constraint)
+}
+
+// isForeignKeyViolation 判断是否为外键约束失败（23503），
+// 典型场景：给笔记关联了一个不存在的 problem_id 或 tag_id。
+func isForeignKeyViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		return false
+	}
+	return pgErr.Code == "23503"
 }
 
 // translateUserError 把 PostgreSQL 的底层错误翻译成业务错误。

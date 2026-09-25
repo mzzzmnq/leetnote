@@ -41,6 +41,10 @@ func New(cfg *config.Config, pool *pgxpool.Pool) *gin.Engine {
 
 	userRepo := repository.NewUserRepository(pool)
 	oauthRepo := repository.NewOAuthRepository(pool)
+	problemRepo := repository.NewProblemRepository(pool)
+	tagRepo := repository.NewTagRepository(pool)
+	noteRepo := repository.NewNoteRepository(pool)
+	solutionRepo := repository.NewSolutionRepository(pool)
 
 	githubClient := oauth.NewGitHubClient(
 		cfg.GitHubClientID, cfg.GitHubClientSecret, cfg.GitHubRedirectURL)
@@ -48,10 +52,16 @@ func New(cfg *config.Config, pool *pgxpool.Pool) *gin.Engine {
 	authSvc := service.NewAuthService(userRepo, tokenManager)
 	userSvc := service.NewUserService(userRepo)
 	oauthSvc := service.NewOAuthService(userRepo, oauthRepo, githubClient, tokenManager)
+	problemSvc := service.NewProblemService(problemRepo)
+	tagSvc := service.NewTagService(tagRepo)
+	noteSvc := service.NewNoteService(pool, noteRepo, solutionRepo, tagRepo, problemRepo)
 
 	authHandler := handler.NewAuthHandler(authSvc, cfg)
 	userHandler := handler.NewUserHandler(userSvc)
 	oauthHandler := handler.NewOAuthHandler(oauthSvc, cfg)
+	problemHandler := handler.NewProblemHandler(problemSvc)
+	tagHandler := handler.NewTagHandler(tagSvc)
+	noteHandler := handler.NewNoteHandler(noteSvc)
 	healthHandler := handler.NewHealthHandler(pool)
 
 	// ---------- 全局中间件 ----------
@@ -101,6 +111,45 @@ func New(cfg *config.Config, pool *pgxpool.Pool) *gin.Engine {
 			// 第三方账号绑定管理
 			users.GET("/me/oauth-accounts", oauthHandler.LinkedAccounts)
 			users.DELETE("/me/oauth-accounts/github", oauthHandler.Unlink)
+		}
+
+		// 题目（全局共享的元数据）
+		problems := authed.Group("/problems")
+		{
+			problems.GET("", problemHandler.List)
+			problems.POST("", problemHandler.Create)
+			problems.GET("/:id", problemHandler.Get)
+			problems.PUT("/:id", problemHandler.Update)
+			problems.DELETE("/:id", problemHandler.Delete)
+		}
+
+		// 标签（全局共享；数量少，不分页）
+		tags := authed.Group("/tags")
+		{
+			tags.GET("", tagHandler.List)
+			tags.POST("", tagHandler.Create)
+			tags.DELETE("/:id", tagHandler.Delete)
+		}
+
+		// 笔记（用户私有数据，所有操作都限定在当前用户名下）
+		notes := authed.Group("/notes")
+		{
+			notes.GET("", noteHandler.List)
+			notes.POST("", noteHandler.Create)
+			notes.GET("/:id", noteHandler.Get)
+			notes.PUT("/:id", noteHandler.Update)
+			notes.DELETE("/:id", noteHandler.Delete)
+			notes.POST("/:id/star", noteHandler.ToggleStar)
+
+			notes.GET("/:id/solutions", noteHandler.ListSolutions)
+			notes.POST("/:id/solutions", noteHandler.CreateSolution)
+		}
+
+		// 解法的独立编辑（不用为了改一个解法提交整篇笔记）
+		solutions := authed.Group("/solutions")
+		{
+			solutions.PUT("/:id", noteHandler.UpdateSolution)
+			solutions.DELETE("/:id", noteHandler.DeleteSolution)
 		}
 	}
 

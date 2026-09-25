@@ -56,22 +56,34 @@ func Register() {
 //	          "details":{"username":"用户名只能包含字母、数字、下划线，长度 3-50"}}}
 func BindJSON(c *gin.Context, obj any) bool {
 	if err := c.ShouldBindJSON(obj); err != nil {
-		var ve validator.ValidationErrors
-		if errors.As(err, &ve) {
-			details := make(map[string]string, len(ve))
-			for _, fe := range ve {
-				details[fe.Field()] = messageFor(fe)
-			}
-			response.Fail(c, errs.ErrValidation.WithDetails(details))
-			return false
-		}
-
-		response.Fail(c, errs.ErrBadRequest.
-			WithMessage("请求体不是合法的 JSON").
-			Wrap(err))
+		failBind(c, err, "请求体不是合法的 JSON")
 		return false
 	}
 	return true
+}
+
+// BindQuery 解析并校验查询参数（分页、筛选等）。
+func BindQuery(c *gin.Context, obj any) bool {
+	if err := c.ShouldBindQuery(obj); err != nil {
+		failBind(c, err, "查询参数不合法")
+		return false
+	}
+	return true
+}
+
+// failBind 把 binding 错误翻译成统一的 422 响应。
+func failBind(c *gin.Context, err error, fallbackMsg string) {
+	var ve validator.ValidationErrors
+	if errors.As(err, &ve) {
+		details := make(map[string]string, len(ve))
+		for _, fe := range ve {
+			details[fe.Field()] = messageFor(fe)
+		}
+		response.Fail(c, errs.ErrValidation.WithDetails(details))
+		return
+	}
+
+	response.Fail(c, errs.ErrBadRequest.WithMessage(fallbackMsg).Wrap(err))
 }
 
 func messageFor(fe validator.FieldError) string {

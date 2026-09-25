@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/mzzzmnq/leetnote-api/internal/model"
 	"github.com/mzzzmnq/leetnote-api/internal/pkg/errs"
@@ -22,11 +21,11 @@ type OAuthRepository interface {
 }
 
 type oauthRepo struct {
-	pool *pgxpool.Pool
+	db Querier
 }
 
-func NewOAuthRepository(pool *pgxpool.Pool) OAuthRepository {
-	return &oauthRepo{pool: pool}
+func NewOAuthRepository(db Querier) OAuthRepository {
+	return &oauthRepo{db: db}
 }
 
 const oauthColumns = `id, user_id, provider, provider_uid, provider_login, avatar_url, created_at, updated_at`
@@ -49,7 +48,7 @@ func (r *oauthRepo) Create(ctx context.Context, a *model.OAuthAccount) error {
 		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id, created_at, updated_at`
 
-	err := r.pool.QueryRow(ctx, q,
+	err := r.db.QueryRow(ctx, q,
 		a.UserID, a.Provider, a.ProviderUID, a.ProviderLogin, a.AvatarURL,
 	).Scan(&a.ID, &a.CreatedAt, &a.UpdatedAt)
 	if err != nil {
@@ -62,7 +61,7 @@ func (r *oauthRepo) GetByProviderUID(ctx context.Context, provider, providerUID 
 	const q = `SELECT ` + oauthColumns + `
 		FROM oauth_accounts WHERE provider = $1 AND provider_uid = $2`
 
-	a, err := scanOAuthAccount(r.pool.QueryRow(ctx, q, provider, providerUID))
+	a, err := scanOAuthAccount(r.db.QueryRow(ctx, q, provider, providerUID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errs.ErrNotFound.WithMessage("未找到关联的第三方账号").Wrap(err)
@@ -76,7 +75,7 @@ func (r *oauthRepo) ListByUserID(ctx context.Context, userID int64) ([]*model.OA
 	const q = `SELECT ` + oauthColumns + `
 		FROM oauth_accounts WHERE user_id = $1 ORDER BY created_at`
 
-	rows, err := r.pool.Query(ctx, q, userID)
+	rows, err := r.db.Query(ctx, q, userID)
 	if err != nil {
 		return nil, fmt.Errorf("查询第三方账号列表失败: %w", err)
 	}
@@ -96,7 +95,7 @@ func (r *oauthRepo) ListByUserID(ctx context.Context, userID int64) ([]*model.OA
 func (r *oauthRepo) Delete(ctx context.Context, userID int64, provider string) error {
 	const q = `DELETE FROM oauth_accounts WHERE user_id = $1 AND provider = $2`
 
-	tag, err := r.pool.Exec(ctx, q, userID, provider)
+	tag, err := r.db.Exec(ctx, q, userID, provider)
 	if err != nil {
 		return fmt.Errorf("解绑第三方账号失败: %w", err)
 	}
