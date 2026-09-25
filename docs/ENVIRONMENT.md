@@ -122,6 +122,42 @@ users · problems · tags · notes · solutions · note_tags · review_cards · 
 
 ---
 
+### 故障排查：`0xC0000142` 后端进程崩溃
+
+**现象**：`pg_ctl status` 显示服务在跑，但 `pg_isready` 报"没有响应"，`psql` 卡住；
+`server.log` 里反复出现：
+
+```
+client backend (PID xxxx) was terminated by exception 0xC0000142
+HINT:  See C include file "ntstatus.h" for a description of the hexadecimal value.
+```
+
+**原因**：`0xC0000142` = `STATUS_DLL_INIT_FAILED`。
+**这不是杀毒软件拦截**（很容易误判成火绒/Defender 的问题），而是
+**postmaster 的进程上下文损坏了**——它无法再创建后端进程。
+
+触发条件：内联执行 `pg_ctl start` 之后，调用方 shell 被强杀
+（命令超时、关窗口、编辑器重启）。postmaster 存活了，但处在受限上下文里。
+
+**修复**：
+
+```powershell
+# 1. 全部杀掉
+Get-Process postgres -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 3
+
+# 2. 清理残留 pid 文件
+Remove-Item D:\dev\pgsql\data\postmaster.pid -Force -ErrorAction SilentlyContinue
+
+# 3. 用完全分离的方式重启（pg-start.ps1 已改为这种方式）
+D:\dev\pg-start.ps1
+```
+
+`pg-start.ps1` 已修正为用 `Start-Process` 分离启动 + 轮询等待就绪，
+不会再触发这个问题。
+
+---
+
 ## 4. 待办：安装 pgvector
 
 **为什么需要**：阶段三（2027.04）的相似题推荐依赖向量检索。
