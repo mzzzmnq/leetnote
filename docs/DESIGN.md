@@ -96,8 +96,8 @@
 | Vue Router | ^4 | 路由 + 路由守卫（登录拦截） |
 | Axios | ^1.7 | 拦截器统一处理 Token 与错误 |
 | Naive UI | ^2 | 组件库，TypeScript 支持极好 |
-| Vditor | ^3 | 中文 Markdown 编辑器，支持代码高亮、粘贴上传图片 |
-| Shiki | — | 代码块高亮 |
+| Markdown 渲染 | **markdown-it + highlight.js** | 轻量可控；highlight.js 按需注册语言，产物 174KB（默认全量是 1MB） |
+| Markdown 编辑 | **自建分屏编辑器** | textarea + 实时预览。原计划的 Vditor 较重（~1MB）且样式侵入性强，自建更可控，后续可替换 |
 | ECharts | ^5 | 刷题统计图表 |
 
 > **前端定位：最小可用即可。** 简历重点是后端 + AI 的深度，前端只需做得干净、能跑通。

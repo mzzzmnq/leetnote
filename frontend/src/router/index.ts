@@ -46,8 +46,34 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'notes',
         name: 'notes',
-        component: () => import('@/views/NotesView.vue'),
+        component: () => import('@/views/NoteListView.vue'),
         meta: { requiresAuth: true, title: '笔记' },
+      },
+      {
+        // 静态路径必须放在动态路径之前声明，语义更清晰
+        // （Vue Router 本身也会按具体度排序，但显式更不易出错）
+        path: 'notes/new',
+        name: 'note-new',
+        component: () => import('@/views/NoteEditView.vue'),
+        meta: { requiresAuth: true, title: '写笔记' },
+      },
+      {
+        path: 'notes/:id(\\d+)',
+        name: 'note-detail',
+        component: () => import('@/views/NoteDetailView.vue'),
+        meta: { requiresAuth: true, title: '笔记详情' },
+      },
+      {
+        path: 'notes/:id(\\d+)/edit',
+        name: 'note-edit',
+        component: () => import('@/views/NoteEditView.vue'),
+        meta: { requiresAuth: true, title: '编辑笔记' },
+      },
+      {
+        path: 'problems',
+        name: 'problems',
+        component: () => import('@/views/ProblemListView.vue'),
+        meta: { requiresAuth: true, title: '题目库' },
       },
       {
         path: 'settings',

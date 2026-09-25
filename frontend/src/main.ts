@@ -4,6 +4,8 @@ import App from './App.vue'
 import router from './router'
 import { setUnauthorizedHandler } from './api/client'
 import './styles/main.css'
+// highlight.js 的代码配色（github 亮色主题）
+import 'highlight.js/styles/github.css'
 
 const app = createApp(App)
 

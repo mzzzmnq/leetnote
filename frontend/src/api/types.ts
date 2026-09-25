@@ -71,3 +71,124 @@ export interface PageData<T> {
   size: number
   pages: number
 }
+
+// ---------------------------------------------------------------
+// 题目 / 标签 / 笔记 / 解法
+//
+// 字段名与后端 DTO 一一对应（snake_case）。
+// ---------------------------------------------------------------
+
+export type Difficulty = 'Easy' | 'Medium' | 'Hard'
+export type NoteStatus = 'draft' | 'published'
+export type TagKind = 'algorithm' | 'data_structure' | 'topic'
+
+export interface Problem {
+  id: number
+  leetcode_id: number | null
+  title: string
+  title_slug: string
+  difficulty: Difficulty
+  url: string | null
+  created_at: string
+}
+
+/** 嵌套在笔记里的精简题目信息 */
+export interface ProblemBrief {
+  id: number
+  leetcode_id: number | null
+  title: string
+  difficulty: Difficulty
+}
+
+export interface ProblemInput {
+  leetcode_id?: number | null
+  title: string
+  title_slug: string
+  difficulty: Difficulty
+  url?: string | null
+}
+
+export interface Tag {
+  id: number
+  name: string
+  slug: string
+  kind: TagKind
+  created_at: string
+}
+
+export interface TagInput {
+  name: string
+  slug: string
+  kind: TagKind
+}
+
+export interface Solution {
+  id: number
+  title: string
+  language: string
+  code: string
+  time_complexity: string | null
+  space_complexity: string | null
+  sort_order: number
+  created_at: string
+}
+
+export interface SolutionInput {
+  title: string
+  language: string
+  code: string
+  time_complexity?: string | null
+  space_complexity?: string | null
+}
+
+/** 列表项：刻意不含 content_md */
+export interface NoteListItem {
+  id: number
+  problem_id: number | null
+  problem: ProblemBrief | null
+  title: string
+  summary: string | null
+  status: NoteStatus
+  is_starred: boolean
+  tags: Tag[]
+  solution_count: number
+  created_at: string
+  updated_at: string
+}
+
+/** 详情：含正文与全部解法 */
+export interface Note extends NoteListItem {
+  content_md: string
+  view_count: number
+  solutions: Solution[]
+}
+
+export interface NoteInput {
+  problem_id?: number | null
+  title: string
+  content_md: string
+  summary?: string | null
+  status: NoteStatus
+  is_starred?: boolean
+  tag_ids?: number[]
+  solutions?: SolutionInput[]
+}
+
+export interface NoteQuery {
+  keyword?: string
+  difficulty?: Difficulty | ''
+  tag_id?: number | null
+  status?: NoteStatus | ''
+  starred?: boolean
+  sort?: 'created' | 'updated' | 'created_asc' | 'title'
+  page?: number
+  size?: number
+}
+
+export interface ProblemQuery {
+  keyword?: string
+  difficulty?: Difficulty | ''
+  page?: number
+  size?: number
+}
+

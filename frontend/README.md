@@ -44,7 +44,24 @@ src/
 ├── router/index.ts         路由表 + 登录守卫
 ├── stores/user.ts          Pinia：用户状态与会话恢复
 ├── layouts/DefaultLayout.vue
-├── views/                  Login / Register / OAuthCallback / Dashboard / Notes / Settings / NotFound
+├── components/
+│   ├── NoteCard.vue        笔记列表项
+│   ├── MarkdownViewer.vue  Markdown 渲染（含代码高亮）
+│   ├── SolutionEditor.vue  单个解法的编辑表单
+│   └── DifficultyTag.vue   难度标签
+├── utils/
+│   ├── markdown.ts         markdown-it 配置 + 按需注册 highlight.js 语言
+│   ├── query.ts            查询参数序列化（自动丢弃空值）
+│   └── format.ts           日期格式化
+├── views/
+│   ├── LoginView.vue / RegisterView.vue / OAuthCallbackView.vue
+│   ├── DashboardView.vue
+│   ├── NoteListView.vue    列表：筛选 + 排序 + 分页
+│   ├── NoteDetailView.vue  详情：正文 + 多解法
+│   ├── NoteEditView.vue    编辑器：分屏预览 + 多解法
+│   ├── ProblemListView.vue 题目库管理
+│   ├── SettingsView.vue
+│   └── NotFoundView.vue
 └── styles/main.css
 ```
 
@@ -96,5 +113,17 @@ Error [ERR_PACKAGE_PATH_NOT_EXPORTED]: Package subpath './lib/tsc' is not define
 
 ## 下一步
 
-- **M3**：接上笔记 / 题目 / 解法 CRUD，替换 `NotesView` 的占位
-- **M5**：Markdown 编辑器（Vditor）+ 代码高亮 + ECharts 统计看板
+- **M6**：搜索（PostgreSQL `pg_trgm`）+ 统计看板（ECharts）
+- **M7**：AI 相似题推荐（pgvector + LLM 解法讲解）
+
+## 已实现的关键点
+
+| 点 | 说明 |
+|---|---|
+| **XSS 防护** | markdown-it 关闭 `html`，用户写的 `<script>` 不会被渲染执行 |
+| **tabnabbing 防护** | 外链自动加 `rel="noopener noreferrer"` |
+| **按需打包** | highlight.js 只注册用到的 12 种语言，产物 1MB → 174KB |
+| **筛选参数** | `toParams` 自动丢弃空值，避免后端 `oneof` 校验把空串判为非法 |
+| **收藏筛选** | 只在开关打开时传 `starred=true`；传 `false` 的含义是「只看未收藏」 |
+| **未保存提醒** | `onBeforeRouteLeave` 拦截，避免手滑丢失编辑内容 |
+| **不可变更新** | `SolutionEditor` 每次 emit 新对象，不直接改 props |
