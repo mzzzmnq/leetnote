@@ -158,22 +158,65 @@ D:\dev\pg-start.ps1
 
 ---
 
-## 4. 待办：安装 pgvector
+## 4. pgvector（已安装 ✅）
 
-**为什么需要**：阶段三（2027.04）的相似题推荐依赖向量检索。
+**版本**：v0.8.6，对应 PostgreSQL 18（Windows x64）
 
-**现状**：EDB 便携版 binaries **不包含 pgvector**，需要单独处理。三种方案：
+### 安装方式
 
-| 方案 | 难度 | 说明 |
+用的是社区预编译包 **`andreiramani/pgvector_pgsql_windows`**——
+官方不提供 Windows 二进制，这个项目补上了，**不需要 Docker、不需要 WSL、不需要 MSVC**。
+
+```powershell
+# 1. 下载对应 PG 版本的包（PG18 用 0.8.6_18）
+curl.exe -sL -o D:\dev\_downloads\vector-pg18.zip `
+  "https://github.com/andreiramani/pgvector_pgsql_windows/releases/download/0.8.6_18/vector.v0.8.6-pg18.zip"
+
+# 2. 解压后目录结构与 PostgreSQL 安装目录一致，直接覆盖进去
+tar -xf D:\dev\_downloads\vector-pg18.zip -C $env:TEMP\vct
+Copy-Item $env:TEMP\vct\lib\vector.dll                      D:\dev\pgsql\lib\ -Force
+Copy-Item $env:TEMP\vct\share\extension\*                   D:\dev\pgsql\share\extension\ -Force -Recurse
+New-Item -ItemType Directory -Force -Path D:\dev\pgsql\include\server\extension\vector | Out-Null
+Copy-Item $env:TEMP\vct\include\server\extension\vector\*   D:\dev\pgsql\include\server\extension\vector\ -Force
+
+# 3. 重启数据库
+Get-Process postgres -EA SilentlyContinue | Stop-Process -Force
+Remove-Item D:\dev\pgsql\data\postmaster.pid -Force -EA SilentlyContinue
+D:\dev\pg-start.ps1
+```
+
+### ⚠️ 创建扩展需要超级用户
+
+```powershell
+# 用 postgres 超级用户创建（普通用户会报 permission denied）
+$env:PGPASSWORD='postgres'
+psql -U postgres -h localhost -d leetnote -c "CREATE EXTENSION IF NOT EXISTS vector;"
+```
+
+> 扩展是**按数据库**创建的，换一个库要重新执行。
+
+### 验证
+
+```sql
+-- 版本
+SELECT extname, extversion FROM pg_extension WHERE extname = 'vector';
+
+-- 向量运算
+SELECT '[1,2,3]'::vector <=> '[1,2,4]'::vector;   -- 余弦距离
+
+-- HNSW 索引（近似最近邻）
+CREATE INDEX ON t USING hnsw (embedding vector_cosine_ops);
+```
+
+### 常用的距离运算符
+
+| 运算符 | 含义 | 索引 opclass |
 |---|---|---|
-| **A. 装 Docker，用 `pgvector/pgvector:pg18` 镜像** | 中 | **推荐**。顺便完成阶段二 W20 的 Docker 学习，且开发环境与生产一致 |
-| B. 下载 pgvector 的 Windows 预编译包 | 中 | 需匹配 PostgreSQL 18 + MSVC 编译，找包麻烦 |
-| C. 源码编译 | 高 | 需装 Visual Studio + C++ 工具链，不划算 |
-| D. 用云数据库（Neon / Supabase） | 低 | 自带 pgvector，但要联网 |
+| `<->` | 欧氏距离（L2） | `vector_l2_ops` |
+| `<=>` | **余弦距离** | `vector_cosine_ops` |
+| `<#>` | 负内积 | `vector_ip_ops` |
 
-**建议**：到阶段二装 Docker 时一并解决，用方案 A。
-
-**在此之前**：不要执行 `migrations/000002_pgvector.up.sql`，会报 `extension "vector" is not available`。
+相似度 = `1 - 距离`。文本语义检索一般用**余弦距离**（只看方向，不受向量长度影响）。
 
 ---
 

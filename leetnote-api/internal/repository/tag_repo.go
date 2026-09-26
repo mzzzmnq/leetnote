@@ -21,6 +21,15 @@ type TagRepository interface {
 	SetNoteTags(ctx context.Context, noteID int64, tagIDs []int64) error
 	// ListByNoteIDs 批量取多篇笔记的标签，用于列表页避免 N+1
 	ListByNoteIDs(ctx context.Context, noteIDs []int64) (map[int64][]*model.Tag, error)
+
+	// SetProblemTags 全量替换某道题的标签关联
+	SetProblemTags(ctx context.Context, problemID int64, tagIDs []int64) error
+	// ListByProblemIDs 批量取多道题的标签
+	ListByProblemIDs(ctx context.Context, problemIDs []int64) (map[int64][]*model.Tag, error)
+
+	// FindOrCreate 按 slug 查找标签，不存在则创建（导入时用，保证可重复执行）
+	FindOrCreate(ctx context.Context, t *model.Tag) (*model.Tag, error)
+
 	// CountExisting 返回给定 ID 中真实存在的个数，用于校验用户传的 tag_ids
 	CountExisting(ctx context.Context, ids []int64) (int64, error)
 }
@@ -181,4 +190,76 @@ func (r *tagRepo) CountExisting(ctx context.Context, ids []int64) (int64, error)
 		return 0, fmt.Errorf("校验标签失败: %w", err)
 	}
 	return n, nil
+}
+
+// FindOrCreate 按 slug 查找标签，不存在则创建。
+//
+// 用 ON CONFLICT ... DO UPDATE 而不是 DO NOTHING：
+// DO NOTHING 在冲突时不返回任何行，拿不到已存在记录的 id，
+// 就得再查一次。DO UPDATE 把 slug 设成它原本的值（无副作用的空操作），
+// 这样无论插入还是冲突都能 RETURNING 回完整的行，一次往返搞定。
+//
+// 这让导入脚本可以【重复执行】而不产生重复标签。
+func (r *tagRepo) FindOrCreate(ctx context.Context, t *model.Tag) (*model.Tag, error) {
+	const q = `
+		INSERT INTO tags (name, slug, kind)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (slug) DO UPDATE SET slug = EXCLUDED.slug
+		RETURNING ` + tagColumns
+
+	out, err := scanTag(r.db.QueryRow(ctx, q, t.Name, t.Slug, t.Kind))
+	if err != nil {
+		return nil, fmt.Errorf("创建或查询标签失败: %w", err)
+	}
+	return out, nil
+}
+
+// SetProblemTags 全量替换题目的标签，逻辑与 SetNoteTags 一致。
+func (r *tagRepo) SetProblemTags(ctx context.Context, problemID int64, tagIDs []int64) error {
+	if _, err := r.db.Exec(ctx, `DELETE FROM problem_tags WHERE problem_id = $1`, problemID); err != nil {
+		return fmt.Errorf("清除题目标签失败: %w", err)
+	}
+	if len(tagIDs) == 0 {
+		return nil
+	}
+
+	const q = `
+		INSERT INTO problem_tags (problem_id, tag_id)
+		SELECT $1, unnest($2::bigint[])
+		ON CONFLICT DO NOTHING`
+
+	if _, err := r.db.Exec(ctx, q, problemID, tagIDs); err != nil {
+		return fmt.Errorf("写入题目标签失败: %w", err)
+	}
+	return nil
+}
+
+func (r *tagRepo) ListByProblemIDs(ctx context.Context, problemIDs []int64) (map[int64][]*model.Tag, error) {
+	if len(problemIDs) == 0 {
+		return map[int64][]*model.Tag{}, nil
+	}
+
+	const q = `
+		SELECT pt.problem_id, t.id, t.name, t.slug, t.kind, t.created_at
+		FROM problem_tags pt
+		JOIN tags t ON t.id = pt.tag_id
+		WHERE pt.problem_id = ANY($1)
+		ORDER BY pt.problem_id, t.id`
+
+	rows, err := r.db.Query(ctx, q, problemIDs)
+	if err != nil {
+		return nil, fmt.Errorf("批量查询题目标签失败: %w", err)
+	}
+	defer rows.Close()
+
+	out := make(map[int64][]*model.Tag, len(problemIDs))
+	for rows.Next() {
+		var problemID int64
+		var t model.Tag
+		if err := rows.Scan(&problemID, &t.ID, &t.Name, &t.Slug, &t.Kind, &t.CreatedAt); err != nil {
+			return nil, fmt.Errorf("扫描题目标签失败: %w", err)
+		}
+		out[problemID] = append(out[problemID], &t)
+	}
+	return out, rows.Err()
 }

@@ -16,6 +16,7 @@ import (
 type ProblemFilter struct {
 	Keyword    string // 模糊匹配 title / title_slug
 	Difficulty string // Easy / Medium / Hard
+	TagID      int64  // 按专题/知识点筛选（题单导入的标签）
 	Pagination
 }
 
@@ -136,6 +137,13 @@ func (r *problemRepo) List(ctx context.Context, f ProblemFilter) ([]*model.Probl
 	if f.Difficulty != "" {
 		args = append(args, f.Difficulty)
 		conditions = append(conditions, fmt.Sprintf("difficulty = $%d", len(args)))
+	}
+	if f.TagID > 0 {
+		args = append(args, f.TagID)
+		// EXISTS 而不是 JOIN：同一道题命中多个标签时不会产生重复行
+		conditions = append(conditions, fmt.Sprintf(
+			"EXISTS (SELECT 1 FROM problem_tags pt WHERE pt.problem_id = problems.id AND pt.tag_id = $%d)",
+			len(args)))
 	}
 
 	where := strings.Join(conditions, " AND ")

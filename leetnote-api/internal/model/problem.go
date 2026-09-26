@@ -24,4 +24,7 @@ type Problem struct {
 	Difficulty string
 	URL        *string
 	CreatedAt  time.Time
+
+	// Tags 是题目所属的专题/知识点（按需填充，列表与详情都会带）
+	Tags []*Tag
 }

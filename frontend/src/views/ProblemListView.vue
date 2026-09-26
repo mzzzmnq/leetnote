@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import {
   NButton,
   NEmpty,
@@ -16,7 +16,8 @@ import {
 } from 'naive-ui'
 import { ApiError } from '@/api/client'
 import { createProblem, deleteProblem, listProblems, updateProblem } from '@/api/problems'
-import type { Difficulty, Problem, ProblemInput } from '@/api/types'
+import { listTags } from '@/api/tags'
+import type { Difficulty, Problem, ProblemInput, Tag } from '@/api/types'
 import DifficultyTag from '@/components/DifficultyTag.vue'
 
 const message = useMessage()
@@ -24,6 +25,7 @@ const dialog = useDialog()
 
 const loading = ref(false)
 const problems = ref<Problem[]>([])
+const tags = ref<Tag[]>([])
 const total = ref(0)
 const pageCount = ref(0)
 
@@ -34,12 +36,23 @@ const DIFFICULTY_OPTIONS = [
   { label: '困难', value: 'Hard' },
 ]
 
+// tagId = 0 表示「全部专题」（Naive UI 的 Select 不接受 null 作为 option value）
+const ALL_TAGS = 0
+
 const query = reactive({
   keyword: '',
   difficulty: '' as Difficulty | '',
+  tagId: ALL_TAGS,
   page: 1,
   size: 15,
 })
+
+// 不按 kind 过滤：题单里的「滑动窗口」「二分查找」复用了已有的算法标签，
+// 它们 kind 是 algorithm 而不是 topic，按 kind=topic 筛会漏掉。
+const tagOptions = computed(() => [
+  { label: '全部专题', value: ALL_TAGS },
+  ...tags.value.map((t) => ({ label: t.name, value: t.id })),
+])
 
 // ---------- 新建 / 编辑弹窗 ----------
 const modalVisible = ref(false)
@@ -59,6 +72,7 @@ async function fetchProblems(): Promise<void> {
     const data = await listProblems({
       keyword: query.keyword.trim() || undefined,
       difficulty: query.difficulty || undefined,
+      tag_id: query.tagId > 0 ? query.tagId : undefined,
       page: query.page,
       size: query.size,
     })
@@ -69,6 +83,14 @@ async function fetchProblems(): Promise<void> {
     message.error(error instanceof ApiError ? error.message : '加载题目失败')
   } finally {
     loading.value = false
+  }
+}
+
+async function fetchTags(): Promise<void> {
+  try {
+    tags.value = await listTags()
+  } catch {
+    // 标签加载失败不影响题目列表本身，静默降级
   }
 }
 
@@ -148,7 +170,9 @@ function handleDelete(problem: Problem): void {
   })
 }
 
-onMounted(fetchProblems)
+onMounted(() => {
+  void Promise.all([fetchTags(), fetchProblems()])
+})
 </script>
 
 <template>
@@ -166,7 +190,7 @@ onMounted(fetchProblems)
         v-model:value="query.keyword"
         placeholder="搜索标题或 slug，回车搜索"
         clearable
-        style="max-width: 260px"
+        style="max-width: 240px"
         @keyup.enter="resetAndFetch"
         @clear="resetAndFetch"
       />
@@ -174,6 +198,13 @@ onMounted(fetchProblems)
         v-model:value="query.difficulty"
         :options="DIFFICULTY_OPTIONS"
         style="width: 130px"
+        @update:value="resetAndFetch"
+      />
+      <n-select
+        v-model:value="query.tagId"
+        :options="tagOptions"
+        filterable
+        style="width: 220px"
         @update:value="resetAndFetch"
       />
     </div>
@@ -197,7 +228,18 @@ onMounted(fetchProblems)
               </a>
               <span v-else>{{ p.title }}</span>
             </div>
-            <code class="row__slug">{{ p.title_slug }}</code>
+            <div class="row__meta">
+              <code class="row__slug">{{ p.title_slug }}</code>
+              <n-tag
+                v-for="tag in p.tags"
+                :key="tag.id"
+                size="tiny"
+                :bordered="false"
+                type="info"
+              >
+                {{ tag.name }}
+              </n-tag>
+            </div>
           </div>
 
           <DifficultyTag :difficulty="p.difficulty" />
@@ -325,6 +367,14 @@ onMounted(fetchProblems)
 .row__slug {
   font-size: 12px;
   color: var(--ln-text-muted);
+}
+
+.row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 4px;
 }
 
 .row__actions {

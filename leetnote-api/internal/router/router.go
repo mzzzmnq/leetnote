@@ -54,7 +54,7 @@ func New(cfg *config.Config, pool *pgxpool.Pool) *gin.Engine {
 	authSvc := service.NewAuthService(userRepo, tokenManager)
 	userSvc := service.NewUserService(userRepo)
 	oauthSvc := service.NewOAuthService(userRepo, oauthRepo, githubClient, tokenManager)
-	problemSvc := service.NewProblemService(problemRepo)
+	problemSvc := service.NewProblemService(problemRepo, tagRepo)
 	tagSvc := service.NewTagService(tagRepo)
 	noteSvc := service.NewNoteService(pool, noteRepo, solutionRepo, tagRepo, problemRepo)
 	statsSvc := service.NewStatsService(statsRepo)

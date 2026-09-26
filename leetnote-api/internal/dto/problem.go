@@ -22,6 +22,7 @@ type ProblemInput struct {
 type ProblemQuery struct {
 	Keyword    string `form:"keyword" binding:"max=100"`
 	Difficulty string `form:"difficulty" binding:"omitempty,oneof=Easy Medium Hard"`
+	TagID      int64  `form:"tag_id"`
 	PageQuery
 }
 
@@ -33,6 +34,8 @@ type ProblemResponse struct {
 	Difficulty string    `json:"difficulty"`
 	URL        *string   `json:"url"`
 	CreatedAt  time.Time `json:"created_at"`
+	// Tags 是题目所属的专题/知识点（由题单导入或手工维护）
+	Tags []TagResponse `json:"tags"`
 }
 
 func NewProblemResponse(p *model.Problem) ProblemResponse {
@@ -47,6 +50,8 @@ func NewProblemResponse(p *model.Problem) ProblemResponse {
 		Difficulty: p.Difficulty,
 		URL:        p.URL,
 		CreatedAt:  p.CreatedAt,
+		// p.Tags 为 nil 时会得到空切片，JSON 里是 [] 而不是 null，前端不用判空
+		Tags: NewTagResponses(p.Tags),
 	}
 }
 

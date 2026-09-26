@@ -90,6 +90,8 @@ export interface Problem {
   difficulty: Difficulty
   url: string | null
   created_at: string
+  /** 所属专题/知识点（题单导入时写入） */
+  tags: Tag[]
 }
 
 /** 嵌套在笔记里的精简题目信息 */
@@ -188,6 +190,7 @@ export interface NoteQuery {
 export interface ProblemQuery {
   keyword?: string
   difficulty?: Difficulty | ''
+  tag_id?: number
   page?: number
   size?: number
 }

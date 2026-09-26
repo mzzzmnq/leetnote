@@ -407,7 +407,40 @@ CREATE TABLE oauth_accounts (
     CONSTRAINT uq_oauth_provider_uid UNIQUE (provider, provider_uid)
 );
 CREATE INDEX idx_oauth_accounts_user ON oauth_accounts (user_id);
+
+-- ============ 题目 ↔ 专题/知识点（多对多） ============
+-- 题单是按专题组织的（相向双指针、滑动窗口、二分…），
+-- 一道题可能同时属于多个专题，所以用关联表而不是在 problems 上加单列。
+CREATE TABLE problem_tags (
+    problem_id BIGINT NOT NULL REFERENCES problems(id) ON DELETE CASCADE,
+    tag_id     BIGINT NOT NULL REFERENCES tags(id)     ON DELETE CASCADE,
+    PRIMARY KEY (problem_id, tag_id)
+);
+CREATE INDEX idx_problem_tags_tag ON problem_tags (tag_id);
 ```
+
+### 5.2.1 题单导入（灵神题单）
+
+```bash
+cd leetnote-api
+
+# 干跑：只解析不写库，先看统计
+go run ./cmd/importer -file D:\dev\_downloads\lingshen-tidan.md -dry-run
+
+# 正式导入（会调 LeetCode 接口补难度）
+go run ./cmd/importer -file D:\dev\_downloads\lingshen-tidan.md
+
+# 试跑前 20 道
+go run ./cmd/importer -file xxx.md -max 20
+```
+
+**为什么需要单独导入**：LeetCode 官方接口只给「英文标题 + slug + 难度」，
+灵神的题单给的是「中文标题 + 专题归属」。两者**按 slug 关联**，
+合并后才能得到「中文标题 + 难度 + 专题」的完整数据。
+
+**工具是幂等的**：重复执行只更新已有记录，不产生重复数据。
+
+> 数据来源：[EndlessCheng/codeforces-go · leetcode/README.md](https://github.com/EndlessCheng/codeforces-go/blob/master/leetcode/README.md)
 
 ### 5.3 中文全文检索
 
