@@ -185,3 +185,41 @@ func (h *NoteHandler) DeleteSolution(c *gin.Context) {
 	}
 	response.NoContent(c)
 }
+
+// similarQuery 是相似题推荐的查询参数。
+//
+// Limit 用 *int：binding 的 omitempty 对数值零值会跳过校验，
+// 用指针才能区分「没传」（用默认值）和「传了 0」（非法）。
+type similarQuery struct {
+	Limit *int `form:"limit" binding:"omitempty,min=1,max=20"`
+}
+
+// Similar GET /api/v1/notes/:id/similar?limit=5
+//
+// 由 Go 服务转发到 leetnote-ai，用户身份在 Go 侧完成校验后传给 AI 服务。
+// 前端不需要（也不应该）直接访问 AI 服务。
+func (h *NoteHandler) Similar(c *gin.Context) {
+	id, ok := paramInt64(c, "id")
+	if !ok {
+		return
+	}
+
+	var q similarQuery
+	if !validator.BindQuery(c, &q) {
+		return
+	}
+
+	limit := 5
+	if q.Limit != nil {
+		limit = *q.Limit
+	}
+
+	items, model, err := h.svc.FindSimilar(
+		c.Request.Context(), middleware.MustUserID(c), id, limit)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+
+	response.OK(c, dto.NewSimilarNotesResponse(id, model, items))
+}

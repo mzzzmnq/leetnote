@@ -80,10 +80,15 @@
 
 ### 服务间通信
 
-| 技术 | 用途 |
-|---|---|
-| **gRPC** | Go ↔ Python 服务间调用，强类型契约、性能优于 REST |
-| Protocol Buffers | 用 `.proto` 定义接口契约，两侧自动生成代码 |
+| 技术 | 状态 | 用途 |
+|---|---|---|
+| **HTTP/JSON** | ✅ 已实现 | Go ↔ Python 服务间调用，用 `X-Internal-Token` 做服务间鉴权 |
+| gRPC + Protocol Buffers | 📋 计划中 | 强类型契约、两侧自动生成代码、二进制传输更省带宽 |
+
+> **为什么先上 HTTP 而不是原计划的 gRPC**：引入 gRPC 要拉 protoc 工具链、
+> 维护 `.proto`、两侧生成代码——对一个只有两个方法、QPS 很低的内部调用来说，
+> 收益不足以抵消复杂度。**接口契约（见 6.3）已经写好了**，将来调用量上来了直接换即可，
+> service 层不用改。
 
 ### 前端
 
@@ -143,7 +148,7 @@ flowchart LR
     SPA -->|"REST /api/v1/*"| NG
     NG -->|"业务接口"| API
     NG -->|"/api/v1/ai/*"| AI
-    API -->|gRPC| AI
+    API -->|"HTTP + 内部令牌"| AI
     API --> PG
     API --> RD
     API -->|预签名上传| R2
@@ -674,15 +679,29 @@ due_at = now() + interval_days 天
 | POST | `/reviews/{card_id}/submit` | 提交评分 `{ "rating": 4 }` |
 | GET | `/reviews/stats` | 复习统计 |
 
-#### AI `/ai/*` 🐍
+#### 前端可见的 AI 能力 🟦
 
-| 方法 | 路径 | 说明 |
-|---|---|---|
-| POST | `/ai/explain` | 生成解法讲解 `{ "note_id": 101 }` |
-| POST | `/ai/similar` | 相似题推荐 `{ "note_id": 101, "limit": 5 }` |
-| POST | `/ai/embed` | 重建笔记向量（内部/管理用） |
-| GET | `/ai/graph/related?tag=动态规划` | 知识点图谱关联（GraphRAG） |
-| POST | `/ai/review-card` | 根据笔记生成复习卡问题 |
+> **前端不直接访问 AI 服务**。Go 侧统一鉴权后转发到 `leetnote-ai`，
+> 这样用户认证只实现一次，AI 服务也不必暴露到公网。
+
+| 方法 | 路径 | 说明 | 状态 |
+|---|---|---|---|
+| GET | `/notes/{id}/similar?limit=5` | 相似题推荐 | ✅ 已实现 |
+
+#### `leetnote-ai` 内部接口 🐍
+
+> 需要请求头 `X-Internal-Token`，**不对前端暴露**。
+
+| 方法 | 路径 | 说明 | 状态 |
+|---|---|---|---|
+| GET | `/health` | 健康检查（不校验令牌，供探活） | ✅ |
+| POST | `/api/v1/ai/embed` | 为单篇笔记生成/重建向量 | ✅ |
+| POST | `/api/v1/ai/embed/batch` | 批量补向量（换模型后重建） | ✅ |
+| GET | `/api/v1/ai/embedding/status?user_id=` | 向量覆盖率 | ✅ |
+| POST | `/api/v1/ai/similar` | 相似题检索 | ✅ |
+| POST | `/api/v1/ai/explain` | LLM 生成解法讲解 | 📋 待实现 |
+| POST | `/api/v1/ai/review-card` | LLM 生成复习卡 | 📋 待实现 |
+| GET | `/api/v1/ai/graph/related` | 知识点图谱（GraphRAG） | 📋 待实现 |
 
 #### 第三方登录 `/auth/github` 🟦
 
@@ -726,7 +745,10 @@ sequenceDiagram
 > - **token 绝不放进跳转 URL**（会进浏览器历史 / Referer / 服务器日志），改为下发 httpOnly Cookie
 > - `redirect` 参数只接受站内相对路径，防开放重定向
 
-### 6.3 gRPC 契约（Go ↔ Python）
+### 6.3 gRPC 契约（📋 计划中，当前用 HTTP/JSON）
+
+> 下面这份契约是**为将来的 gRPC 升级预留的**。当前实现走 HTTP/JSON，
+> 接口语义与这份 proto 一致，将来替换时 service 层不用改。
 
 `proto/leetnote.proto`：
 
@@ -1114,7 +1136,7 @@ cd frontend     && npm run dev                          # Vue   :5173
 > **LeetNote · 算法练习笔记系统**（个人项目）　2026.10 – 2027.07
 > 技术栈：Go · Gin · PostgreSQL · pgvector · Python · FastAPI · gRPC · Vue 3 · TypeScript · Docker · GitHub Actions
 
-- 采用 **Go + Python 双服务架构**：Go(Gin) 承载高并发业务 API，Python(FastAPI) 负责 RAG 与 LLM 能力，两者通过 **gRPC** 通信；使用 Nginx 按路径分流。
+- 采用 **Go + Python 双服务架构**：Go(Gin) 承载业务 API 并**统一负责用户鉴权**，Python(FastAPI) 负责向量化与相似度检索；服务间通过 HTTP + 内部令牌通信，**鉴权只在 Go 侧做一次**（AI 服务不重复实现用户认证）
 - 基于 PostgreSQL 设计 **9 张表**的关系模型，通过**部分唯一索引**与**外键级联策略**保证一致性；使用 **golang-migrate** 管理表结构演进。
 - 针对中文笔记检索，采用 **`pg_trgm` + GIN 索引**替代 PostgreSQL 原生全文检索（中文分词受限），将关键字查询从 **820ms 降至 90ms**。
 - 使用 **pgvector + HNSW 索引**实现相似题推荐，构建检索评估集（召回率/命中率）迭代优化，Top-5 命中率达 **XX%**。

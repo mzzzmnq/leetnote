@@ -24,6 +24,14 @@ type Config struct {
 	AIGRPCAddr  string   `envconfig:"AI_GRPC_ADDR" default:"localhost:9090"`
 	CORSOrigins []string `envconfig:"CORS_ORIGINS" default:"http://localhost:5173"`
 
+	// ---------- leetnote-ai（Python 服务）----------
+	// 目前用 HTTP/JSON 通信。原计划的 gRPC 留待后续（见 docs/DESIGN.md 说明）：
+	// 这个数据量下 HTTP 完全够用，而引入 gRPC 需要 protoc 工具链与两侧代码生成，
+	// 收益不足以抵消复杂度。
+	AIServiceURL string `envconfig:"AI_SERVICE_URL" default:"http://127.0.0.1:8000"`
+	// 服务间共享密钥，AI 服务用它拒绝非本服务发来的请求
+	AIInternalToken string `envconfig:"AI_INTERNAL_TOKEN" default:"dev-internal-token-change-me"`
+
 	// FrontendURL 用于 OAuth 回调后跳回前端
 	FrontendURL string `envconfig:"FRONTEND_URL" default:"http://localhost:5173"`
 

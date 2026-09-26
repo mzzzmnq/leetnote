@@ -249,22 +249,82 @@ go run main.go                # 能跑通即可
 
 ---
 
-## 6. 环境验证清单
+## 6. Python 环境（leetnote-ai 服务）
+
+### ⚠️ 必须用官方 Python，不能用 Anaconda
+
+本机的 **Anaconda Python 3.11.7 配的是 OpenSSL 3.5.7**，与它编译时的版本不匹配，
+导致**所有 HTTPS 请求都失败**：
+
+```
+SSLError: [ASN1: NOT_ENOUGH_DATA] not enough data (_ssl.c:4035)
+```
+
+最坑的地方是它**表现为「pip 找不到任何包」**，而同一台机器上 `curl` 一切正常 ——
+非常容易误判成网络问题或镜像源问题（实际上我一开始就误判了两次）。
+
+| Python | OpenSSL | HTTPS |
+|---|---|---|
+| Anaconda（`D:\Anaconda`） | **3.5.7** | ❌ 失败 |
+| 官方（`AppData\Local\Programs\Python\Python311`） | **3.0.11** | ✅ 正常 |
+
+**诊断命令**：
+
+```powershell
+python -c "import ssl; print(ssl.OPENSSL_VERSION)"
+# 或者直接用哪个 Python 建的 venv，就用它的 python 跑
+```
+
+**结论**：`leetnote-ai` 的虚拟环境用官方 Python 创建：
+
+```powershell
+$py = 'C:\Users\<你>\AppData\Local\Programs\Python\Python311\python.exe'
+& $py -m venv D:\vibecoding_test\leetnote\leetnote-ai\.venv
+```
+
+### pip 镜像源
+
+清华源会限流返回 **403**，用阿里云：
+
+```powershell
+.\.venv\Scripts\pip.exe install <包名> -i https://mirrors.aliyun.com/pypi/simple/
+```
+
+### 启动方式
+
+**必须用 `run.py`**，不能直接 `uvicorn app.main:app`：
+
+```powershell
+cd D:\vibecoding_test\leetnote\leetnote-ai
+.\.venv\Scripts\python.exe run.py
+```
+
+原因见 [`../leetnote-ai/README.md`](../leetnote-ai/README.md) 的「已知问题 1」——
+Windows 的 `ProactorEventLoop` 与 psycopg3 异步模式不兼容，而 uvicorn 0.53
+把 `ProactorEventLoop` 硬编码进了 loop factory，只能绕开它。
+
+---
+
+## 7. 环境验证清单
 
 配置完成后，逐条勾选：
 
 - [x] `go version` 输出 `go1.27.1 windows/amd64`
 - [x] `psql --version` 输出 `18.6`
 - [x] `D:\dev\pg-status.ps1` 显示 `accepting connections`
-- [x] `leetnote` 库存在，含 8 张表
-- [x] `pg_trgm` 扩展已启用
+- [x] `leetnote` 库存在，表结构齐全（含 `problem_tags` / `note_embeddings`）
+- [x] 扩展已启用：`pg_trgm` · `pgcrypto` · `vector 0.8.6`
 - [x] Go 程序能连上 PostgreSQL 并查询（已用 pgx 实测通过）
+- [x] `leetnote-ai` 服务 `/health` 返回 `ok`
+- [x] 官方 Python 建的虚拟环境可用（**Anaconda 的 Python 有 SSL 问题，见第 6 节**）
+- [x] 灵神题单已导入（172 道题 / 27 个专题）
+- [x] 相似题检索端到端跑通（Go → Python → pgvector）
 - [ ] **重启终端后重新验证 `go` 和 `psql` 命令可用**
 - [ ] 安装 DBeaver（可选，图形化看表更方便）
 
 ---
 
-## 7. GitHub 访问（重要）
+## 8. GitHub 访问（重要）
 
 国内直连 GitHub 会被阻断。本机**已配置 SSH over 443**，日常 git 操作**不需要代理**。
 
@@ -358,7 +418,7 @@ SSH over 443 **只解决 git 操作**（clone / pull / push）。
 
 ---
 
-## 8. 远程仓库
+## 9. 远程仓库
 
 | 项 | 值 |
 |---|---|
@@ -378,7 +438,7 @@ git push
 
 ---
 
-## 9. 下一步
+## 10. 下一步
 
 环境已就绪，**M1（`leetnote-api` Go 骨架）已完成**：
 

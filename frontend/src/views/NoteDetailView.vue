@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { NButton, NSpin, NTag, useDialog, useMessage } from 'naive-ui'
 import { ApiError } from '@/api/client'
-import { deleteNote, getNote, toggleStar } from '@/api/notes'
-import type { Note } from '@/api/types'
+import { deleteNote, fetchSimilarNotes, getNote, toggleStar } from '@/api/notes'
+import type { Note, SimilarNote } from '@/api/types'
 import DifficultyTag from '@/components/DifficultyTag.vue'
 import MarkdownViewer from '@/components/MarkdownViewer.vue'
 import { formatDate } from '@/utils/format'
@@ -19,6 +19,11 @@ const loading = ref(true)
 const failed = ref('')
 const note = ref<Note | null>(null)
 const starring = ref(false)
+
+// 相似题推荐（来自 leetnote-ai 服务）
+const similar = ref<SimilarNote[]>([])
+const similarModel = ref('')
+const similarLoading = ref(false)
 
 const noteId = Number(route.params.id)
 
@@ -38,6 +43,21 @@ async function load(): Promise<void> {
     failed.value = error instanceof ApiError ? error.message : '加载失败'
   } finally {
     loading.value = false
+  }
+}
+
+// 相似题是附加功能：失败就静默不显示，不该影响笔记正文的阅读。
+// 向量生成是异步的，刚创建的笔记可能还没算好，这时也会返回空列表。
+async function loadSimilar(): Promise<void> {
+  similarLoading.value = true
+  try {
+    const data = await fetchSimilarNotes(noteId, 5)
+    similar.value = data.items
+    similarModel.value = data.model
+  } catch {
+    similar.value = []
+  } finally {
+    similarLoading.value = false
   }
 }
 
@@ -74,7 +94,11 @@ function handleDelete(): void {
   })
 }
 
-onMounted(load)
+onMounted(async () => {
+  await load()
+  // 笔记正文先展示出来，相似题在后台加载 —— 不阻塞首屏
+  void loadSimilar()
+})
 </script>
 
 <template>
@@ -143,6 +167,32 @@ onMounted(load)
             <!-- eslint-disable-next-line vue/no-v-html -- 由 highlight.js 转义后输出 -->
             <div v-html="renderCodeBlock(sol.code, sol.language)" />
           </article>
+        </section>
+
+        <section v-if="similarLoading || similar.length" class="similar">
+          <h2 class="similar__heading">
+            相似题推荐
+            <span v-if="similarModel" class="similar__model">{{ similarModel }}</span>
+          </h2>
+
+          <n-spin v-if="similarLoading" size="small" />
+
+          <div v-else class="similar__list">
+            <RouterLink
+              v-for="item in similar"
+              :key="item.note_id"
+              :to="{ name: 'note-detail', params: { id: item.note_id } }"
+              class="similar__item"
+            >
+              <div class="similar__row">
+                <span class="similar__title">{{ item.title }}</span>
+                <span class="similar__score">
+                  {{ Math.round(item.similarity * 100) }}%
+                </span>
+              </div>
+              <p v-if="item.summary" class="similar__summary">{{ item.summary }}</p>
+            </RouterLink>
+          </div>
         </section>
       </template>
     </n-spin>
@@ -251,6 +301,75 @@ onMounted(load)
 }
 
 .solution__cx {
+  font-size: 12px;
+  color: var(--ln-text-muted);
+}
+
+/* ---------- 相似题推荐 ---------- */
+.similar {
+  margin-top: 24px;
+  padding: 18px 20px;
+  background: #fff;
+  border: 1px solid var(--ln-border);
+  border-radius: 10px;
+}
+
+.similar__heading {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 0 0 12px;
+  font-size: 15px;
+}
+
+.similar__model {
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--ln-text-muted);
+  background: var(--ln-bg);
+  border-radius: 10px;
+}
+
+.similar__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.similar__item {
+  padding: 10px 12px;
+  color: inherit;
+  background: var(--ln-bg);
+  border-radius: 8px;
+}
+
+.similar__item:hover {
+  background: rgb(47 111 237 / 8%);
+  text-decoration: none;
+}
+
+.similar__row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.similar__title {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.similar__score {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ln-primary);
+}
+
+.similar__summary {
+  margin: 4px 0 0;
   font-size: 12px;
   color: var(--ln-text-muted);
 }

@@ -240,3 +240,23 @@ export interface SearchResponse {
   problems: Problem[]
 }
 
+// ---------------------------------------------------------------
+// 相似题推荐（由 leetnote-ai 服务提供）
+// ---------------------------------------------------------------
+
+export interface SimilarNote {
+  note_id: number
+  title: string
+  summary: string | null
+  is_starred: boolean
+  /** 余弦相似度，0~1 */
+  similarity: number
+}
+
+export interface SimilarNotesResponse {
+  note_id: number
+  /** 生成向量所用的模型标识 */
+  model: string
+  items: SimilarNote[]
+}
+

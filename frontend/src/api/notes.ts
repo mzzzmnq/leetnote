@@ -5,6 +5,7 @@ import type {
   NoteListItem,
   NoteQuery,
   PageData,
+  SimilarNotesResponse,
   Solution,
   SolutionInput,
 } from './types'
@@ -60,4 +61,20 @@ export async function updateSolution(id: number, input: SolutionInput): Promise<
 
 export async function deleteSolution(id: number): Promise<void> {
   await client.delete(`/solutions/${id}`)
+}
+
+/**
+ * 查询与某篇笔记相似的笔记。
+ *
+ * 实际计算发生在 leetnote-ai（Python）服务，Go 侧负责鉴权后转发 ——
+ * 前端不直接访问 AI 服务。
+ */
+export async function fetchSimilarNotes(
+  noteId: number,
+  limit = 5,
+): Promise<SimilarNotesResponse> {
+  const { data } = await client.get<SimilarNotesResponse>(`/notes/${noteId}/similar`, {
+    params: toParams({ limit }),
+  })
+  return data
 }

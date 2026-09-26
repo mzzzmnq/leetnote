@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/mzzzmnq/leetnote-api/internal/ai"
 	"github.com/mzzzmnq/leetnote-api/internal/config"
 	"github.com/mzzzmnq/leetnote-api/internal/handler"
 	"github.com/mzzzmnq/leetnote-api/internal/middleware"
@@ -51,12 +52,14 @@ func New(cfg *config.Config, pool *pgxpool.Pool) *gin.Engine {
 	githubClient := oauth.NewGitHubClient(
 		cfg.GitHubClientID, cfg.GitHubClientSecret, cfg.GitHubRedirectURL)
 
+	aiClient := ai.NewClient(cfg.AIServiceURL, cfg.AIInternalToken)
+
 	authSvc := service.NewAuthService(userRepo, tokenManager)
 	userSvc := service.NewUserService(userRepo)
 	oauthSvc := service.NewOAuthService(userRepo, oauthRepo, githubClient, tokenManager)
 	problemSvc := service.NewProblemService(problemRepo, tagRepo)
 	tagSvc := service.NewTagService(tagRepo)
-	noteSvc := service.NewNoteService(pool, noteRepo, solutionRepo, tagRepo, problemRepo)
+	noteSvc := service.NewNoteService(pool, noteRepo, solutionRepo, tagRepo, problemRepo, aiClient)
 	statsSvc := service.NewStatsService(statsRepo)
 	searchSvc := service.NewSearchService(searchRepo, tagRepo, problemRepo)
 
@@ -149,6 +152,9 @@ func New(cfg *config.Config, pool *pgxpool.Pool) *gin.Engine {
 
 			notes.GET("/:id/solutions", noteHandler.ListSolutions)
 			notes.POST("/:id/solutions", noteHandler.CreateSolution)
+
+			// 相似题推荐（转发给 leetnote-ai 服务）
+			notes.GET("/:id/similar", noteHandler.Similar)
 		}
 
 		// 解法的独立编辑（不用为了改一个解法提交整篇笔记）

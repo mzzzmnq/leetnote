@@ -2,11 +2,14 @@ package service
 
 import (
 	"context"
+	"log/slog"
 	"sort"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/mzzzmnq/leetnote-api/internal/ai"
 	"github.com/mzzzmnq/leetnote-api/internal/db"
 	"github.com/mzzzmnq/leetnote-api/internal/dto"
 	"github.com/mzzzmnq/leetnote-api/internal/model"
@@ -16,14 +19,16 @@ import (
 
 // NoteService 是项目的核心业务。
 //
-// 它比其它 service 多持有一个 pool：因为「创建/更新笔记」要在事务里
-// 同时写 notes、solutions、note_tags 三张表，需要开启事务的能力。
+// 它比其它 service 多持有两个东西：
+//   - pool：因为「创建/更新笔记」要在事务里同时写三张表
+//   - ai  ：用于触发向量生成与相似题检索
 type NoteService struct {
 	pool      *pgxpool.Pool
 	notes     repository.NoteRepository
 	solutions repository.SolutionRepository
 	tags      repository.TagRepository
 	problems  repository.ProblemRepository
+	ai        *ai.Client
 }
 
 func NewNoteService(
@@ -32,6 +37,7 @@ func NewNoteService(
 	solutions repository.SolutionRepository,
 	tags repository.TagRepository,
 	problems repository.ProblemRepository,
+	aiClient *ai.Client,
 ) *NoteService {
 	return &NoteService{
 		pool:      pool,
@@ -39,6 +45,7 @@ func NewNoteService(
 		solutions: solutions,
 		tags:      tags,
 		problems:  problems,
+		ai:        aiClient,
 	}
 }
 
@@ -88,7 +95,14 @@ func (s *NoteService) Create(ctx context.Context, userID int64, in dto.NoteInput
 	}
 
 	// 事务提交后再读一次，返回带关联数据的完整对象
-	return s.GetByID(ctx, userID, noteID)
+	created, err := s.GetByID(ctx, userID, noteID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 异步生成向量（失败不影响保存）
+	s.scheduleEmbed(noteID)
+	return created, nil
 }
 
 // GetByID 返回笔记详情（含题目、标签、解法）。
@@ -169,7 +183,15 @@ func (s *NoteService) Update(ctx context.Context, userID, id int64, in dto.NoteI
 	if err != nil {
 		return nil, err
 	}
-	return s.GetByID(ctx, userID, id)
+
+	updated, err := s.GetByID(ctx, userID, id)
+	if err != nil {
+		return nil, err
+	}
+
+	// 正文变了，向量要重建，否则相似题结果会一直停留在旧内容上
+	s.scheduleEmbed(id)
+	return updated, nil
 }
 
 func (s *NoteService) Delete(ctx context.Context, userID, id int64) error {
@@ -273,6 +295,60 @@ func enrichNotes(
 			}
 		}
 	}
+}
+
+// ---------------------------------------------------------------
+// 相似题推荐
+// ---------------------------------------------------------------
+
+// FindSimilar 返回与指定笔记相似的笔记。
+func (s *NoteService) FindSimilar(
+	ctx context.Context,
+	userID, noteID int64,
+	limit int,
+) ([]ai.SimilarNote, string, error) {
+	if !s.ai.Enabled() {
+		return nil, "", errs.ErrBadRequest.WithMessage("AI 服务未启用（未配置 AI_SERVICE_URL）")
+	}
+
+	// 先确认这篇笔记属于当前用户。
+	// AI 服务内部也会用 user_id 过滤，这里是更早的一道防线：
+	// 拿别人的 note_id 会直接 404，连 AI 服务都不会被打到。
+	if _, err := s.notes.GetByID(ctx, userID, noteID); err != nil {
+		return nil, "", err
+	}
+
+	items, model, err := s.ai.FindSimilar(ctx, userID, noteID, limit)
+	if err != nil {
+		return nil, "", errs.ErrInternal.Wrap(err)
+	}
+	return items, model, nil
+}
+
+// scheduleEmbed 异步触发向量生成。
+//
+// 【为什么异步】embedding 要调外部模型，可能耗时几百毫秒到几秒。
+// 用户保存笔记时不该干等 —— 向量只是「相似题推荐」的附加数据。
+//
+// 【为什么新开 context】不能用请求的 context：请求返回后它就被取消了，
+// 向量就生成不出来。这里用一个独立的、带超时的 context。
+//
+// 【生产环境的做法】应该换成消息队列（失败可重试、可观测、不丢任务）。
+// 这里用 goroutine 是权衡后的简化，失败只记日志。
+func (s *NoteService) scheduleEmbed(noteID int64) {
+	if !s.ai.Enabled() {
+		return
+	}
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+
+		if err := s.ai.EmbedNote(ctx, noteID); err != nil {
+			slog.Warn("生成笔记向量失败，相似题推荐将不包含这篇",
+				"note_id", noteID, "error", err)
+		}
+	}()
 }
 
 func buildSolutions(inputs []dto.SolutionInput) []*model.Solution {
