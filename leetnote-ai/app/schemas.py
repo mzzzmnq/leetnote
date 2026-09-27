@@ -70,3 +70,24 @@ class HealthResponse(BaseModel):
     embedding_mode: Literal["remote", "local"]
     embedding_dim: int
     database: str
+    chat_model: str
+    chat_enabled: bool
+
+
+# ---------------------------------------------------------------
+# LLM 讲解
+# ---------------------------------------------------------------
+
+
+class ExplainRequest(BaseModel):
+    note_id: int = Field(gt=0)
+    # 与相似题一样：user_id 由 Go 服务在鉴权后传入
+    user_id: int = Field(gt=0)
+
+
+class ExplainResponse(BaseModel):
+    note_id: int
+    model: str
+    content: str
+    prompt_tokens: int
+    completion_tokens: int

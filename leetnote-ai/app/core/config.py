@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     # 注意用 libpq 格式（postgresql://），不是 SQLAlchemy 的 postgresql+psycopg://
     database_url: str = "postgresql://leetnote:leetnote@localhost:5432/leetnote"
 
-    # ---------- Embedding / LLM ----------
+    # ---------- Embedding ----------
     # 留空则回退到本地哈希向量（见 embedding/local.py），保证没有 API Key 也能跑通链路。
     llm_api_key: str = ""
     llm_base_url: str = "https://api.siliconflow.cn/v1"
@@ -30,6 +30,23 @@ class Settings(BaseSettings):
     # 向量维度必须与 note_embeddings.embedding 的列定义一致（vector(1536)）。
     # 换用维度不同的模型时需要先做一次迁移改列类型。
     embedding_dim: int = 1536
+
+    # ---------- 对话模型（LLM 生成讲解 / 复习卡）----------
+    # 与 embedding 分开配置：两者常常来自不同供应商。
+    # 默认指向 OpenCode Go（见下方说明）。
+    chat_api_key: str = ""
+    chat_base_url: str = "https://opencode.ai/zen/go/v1"
+    chat_model: str = "space-bunny-free"
+
+    # OpenCode Go 对第三方客户端有两条硬性要求
+    # （见 https://opencode.ai/docs/go/#where-can-i-use-it）：
+    #   1. 用【自己的】User-Agent 标识，不能是通用 SDK / HTTP 库的名字
+    #   2. 每个会话带稳定的会话 ID，服务端据此优化路由与 prompt 缓存
+    #      不带这个头会直接返回 503 "Request is missing x-opencode-session"
+    #
+    # 换成其他供应商时把这两个值留空即可，客户端会自动跳过。
+    chat_user_agent: str = "leetnote-ai/0.1.0"
+    chat_session_header: str = "x-opencode-session"
 
     # 检索返回的相似题数量上限
     similar_limit_default: int = 5
@@ -45,6 +62,11 @@ class Settings(BaseSettings):
     def use_remote_embedding(self) -> bool:
         """是否启用远程 embedding 模型。"""
         return bool(self.llm_api_key and self.embedding_model)
+
+    @property
+    def use_chat_model(self) -> bool:
+        """是否启用对话模型（LLM 讲解等）。"""
+        return bool(self.chat_api_key and self.chat_model)
 
     @property
     def is_production(self) -> bool:

@@ -26,8 +26,9 @@ func NewClient(baseURL, token string) *Client {
 		baseURL: baseURL,
 		token:   token,
 		http: &http.Client{
-			// AI 服务内部可能调远程 embedding 模型，给宽一点
-			Timeout: 60 * time.Second,
+			// 要覆盖 LLM 生成这类慢调用（实测 10s 上下，长笔记可能到 30s+）。
+			// 与 Go 侧 http.Server 的 WriteTimeout 保持一致。
+			Timeout: 120 * time.Second,
 		},
 	}
 }
@@ -74,6 +75,43 @@ func (c *Client) FindSimilar(ctx context.Context, userID, noteID int64, limit in
 	}
 
 	return out.Items, out.Model, nil
+}
+
+// ExplainResult 是 LLM 生成的解法讲解。
+type ExplainResult struct {
+	Model            string
+	Content          string
+	PromptTokens     int
+	CompletionTokens int
+}
+
+type explainResponse struct {
+	Model            string `json:"model"`
+	Content          string `json:"content"`
+	PromptTokens     int    `json:"prompt_tokens"`
+	CompletionTokens int    `json:"completion_tokens"`
+}
+
+// ExplainNote 让 LLM 按固定结构点评某篇笔记。
+//
+// 这个调用比较慢（要等模型生成），Go 侧的客户端超时设得比较宽。
+func (c *Client) ExplainNote(ctx context.Context, userID, noteID int64) (*ExplainResult, error) {
+	var out explainResponse
+
+	_, err := c.post(ctx, "/api/v1/ai/explain", map[string]any{
+		"note_id": noteID,
+		"user_id": userID,
+	}, &out)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ExplainResult{
+		Model:            out.Model,
+		Content:          out.Content,
+		PromptTokens:     out.PromptTokens,
+		CompletionTokens: out.CompletionTokens,
+	}, nil
 }
 
 func (c *Client) post(ctx context.Context, path string, payload any, out any) (int, error) {

@@ -141,7 +141,8 @@ leetnote-ai    (Python + FastAPI)  → RAG 相似题检索、LLM 解法讲解、
 - [x] **M6 完成**：搜索 + 统计看板 —— `pg_trgm` 三元组索引加速的中文检索（标题命中优先排序）、**LIKE 通配符转义**（搜 "100%" 不会命中全部）、**gaps-and-islands 算连续打卡**、趋势图用 `generate_series` 补齐空日期；前端 ECharts 按需引入 + 4 张统计卡 + 折线/饼图；顺带修掉 `omitempty` 对数值零值跳过校验导致 `?days=0` 绕过 `min=1` 的问题
 - [x] **题单导入**：把**灵神的题单**（172 道 / 27 个专题）导入题目库 —— 写了一个幂等的 Go 导入工具 `cmd/importer`：解析 markdown 表格（第一列专题需向下继承）、按 slug 与 LeetCode 接口补难度；新增 `problem_tags` 表承载专题归属，题目列表支持按专题 + 难度组合筛选
 - [x] **M7 第一步完成**：`leetnote-ai`（Python）服务 —— FastAPI + psycopg 异步连接池；Embedding 抽象成协议，**远程模型（任何 OpenAI 兼容服务）与本地哈希向量器可一行配置切换**；`pgvector` 相似度检索（HNSW 索引）；笔记创建/更新后**异步重建向量**；Go 侧统一鉴权后转发，AI 服务用 `X-Internal-Token` 拒绝外部访问
-- [ ] **M7 剩余**：LLM 解法讲解、自动复习卡、GraphRAG 知识点图谱（需要配一个 LLM API Key）
+- [x] **M7 第二步完成**：LLM 解法讲解 —— `leetnote-ai` 新增对话模型客户端，**接入 OpenCode Go 订阅**（$10/月，多种开源编码模型）；踩通了它对第三方客户端的三条要求（自带 UA + 稳定的 `x-opencode-session` 头 + 正常 agent 流量），不带会话头会直接 503；前端加「AI 讲解」面板，按「思路 / 关键点 / 复杂度 / 易错点」四段输出，实测 11s 出结果
+- [ ] **M7 剩余**：自动复习卡、GraphRAG 知识点图谱
 - [ ] **M8**：间隔重复复习（SM-2）、Redis 缓存与限流、图片上传
 - [x] **M4 完成**：前端骨架 —— Vue 3 + TS + Vite + Pinia + Naive UI；登录/注册/GitHub 回调/概览/设置页；**401 单飞自动刷新**（并发只刷一次，独立 axios 实例防递归）；页面刷新后靠 refresh Cookie 自动恢复会话；`vue-tsc` 类型检查与生产构建均通过
 - [ ] **终端重启后验证**：`go version` / `psql --version` 能直接用

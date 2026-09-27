@@ -687,6 +687,7 @@ due_at = now() + interval_days 天
 | 方法 | 路径 | 说明 | 状态 |
 |---|---|---|---|
 | GET | `/notes/{id}/similar?limit=5` | 相似题推荐 | ✅ 已实现 |
+| POST | `/notes/{id}/explain` | LLM 解法讲解（同步，约 10s） | ✅ 已实现 |
 
 #### `leetnote-ai` 内部接口 🐍
 
@@ -699,7 +700,7 @@ due_at = now() + interval_days 天
 | POST | `/api/v1/ai/embed/batch` | 批量补向量（换模型后重建） | ✅ |
 | GET | `/api/v1/ai/embedding/status?user_id=` | 向量覆盖率 | ✅ |
 | POST | `/api/v1/ai/similar` | 相似题检索 | ✅ |
-| POST | `/api/v1/ai/explain` | LLM 生成解法讲解 | 📋 待实现 |
+| POST | `/api/v1/ai/explain` | LLM 生成解法讲解（OpenCode Go） | ✅ |
 | POST | `/api/v1/ai/review-card` | LLM 生成复习卡 | 📋 待实现 |
 | GET | `/api/v1/ai/graph/related` | 知识点图谱（GraphRAG） | 📋 待实现 |
 

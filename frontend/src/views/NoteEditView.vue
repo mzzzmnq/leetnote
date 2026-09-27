@@ -13,7 +13,7 @@ import {
 } from 'naive-ui'
 import { ApiError } from '@/api/client'
 import { createNote, getNote, updateNote } from '@/api/notes'
-import { listProblems } from '@/api/problems'
+import { getProblem, listProblems } from '@/api/problems'
 import { listTags } from '@/api/tags'
 import type { NoteInput, SolutionInput, Tag } from '@/api/types'
 import MarkdownViewer from '@/components/MarkdownViewer.vue'
@@ -136,6 +136,29 @@ async function load(): Promise<void> {
           },
           ...problemOptions.value,
         ]
+      }
+      return
+    }
+
+    // 新建时的 ?problem=<id> 预选：
+    // 从题目库或搜索结果点「写笔记」会带上这个参数，之前漏了读取。
+    const preset = Number(route.query.problem)
+    if (Number.isInteger(preset) && preset > 0) {
+      form.problem_id = preset
+      // 确保这个题目在候选项里，否则下拉会显示成空白
+      if (!problemOptions.value.some((o) => o.value === preset)) {
+        try {
+          const p = await getProblem(preset)
+          problemOptions.value = [
+            {
+              label: p.leetcode_id ? `${p.leetcode_id}. ${p.title}` : p.title,
+              value: p.id,
+            },
+            ...problemOptions.value,
+          ]
+        } catch {
+          // 题目不存在就忽略这个参数，不影响写笔记
+        }
       }
     }
   } catch (error) {

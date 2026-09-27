@@ -15,11 +15,12 @@ from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI
 
-from app.api.v1 import health, similar
+from app.api.v1 import explain, health, similar
 from app.core.config import get_settings
 from app.core.logging import setup_logging
 from app.db import close_pool, init_pool
 from app.embedding import build_embedder
+from app.llm import build_chat_client
 
 # 注意：Windows 上需要在事件循环创建【之前】切换到 SelectorEventLoop，
 # 这一步写在 run.py 里（uvicorn 的顺序是「建循环 → 导入 app」，写在这里来不及）。
@@ -38,8 +39,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # 数据库连不上就直接启动失败，不要带着坏状态对外服务
     await init_pool(settings.database_url)
     app.state.embedder = build_embedder(settings)
+    app.state.chat_client = build_chat_client(settings)
 
-    logger.info("服务就绪，向量器=%s", app.state.embedder.name)
+    chat_state = "启用" if app.state.chat_client else "未启用"
+    logger.info("服务就绪，向量器=%s，对话模型=%s", app.state.embedder.name, chat_state)
     try:
         yield
     finally:
@@ -59,4 +62,5 @@ app.include_router(health.router)
 
 api_v1 = APIRouter(prefix="/api/v1/ai")
 api_v1.include_router(similar.router)
+api_v1.include_router(explain.router)
 app.include_router(api_v1)

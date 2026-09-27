@@ -155,6 +155,9 @@ func New(cfg *config.Config, pool *pgxpool.Pool) *gin.Engine {
 
 			// 相似题推荐（转发给 leetnote-ai 服务）
 			notes.GET("/:id/similar", noteHandler.Similar)
+
+			// LLM 解法讲解（同步等待模型生成，较慢）
+			notes.POST("/:id/explain", noteHandler.Explain)
 		}
 
 		// 解法的独立编辑（不用为了改一个解法提交整篇笔记）

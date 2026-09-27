@@ -1,5 +1,6 @@
 import { client } from './client'
 import type {
+  ExplainResponse,
   Note,
   NoteInput,
   NoteListItem,
@@ -76,5 +77,21 @@ export async function fetchSimilarNotes(
   const { data } = await client.get<SimilarNotesResponse>(`/notes/${noteId}/similar`, {
     params: toParams({ limit }),
   })
+  return data
+}
+
+/**
+ * 让 LLM 点评这篇笔记。
+ *
+ * 这是【同步调用】，要等模型生成完才返回（实测 10s 上下）。
+ * 前端必须显示加载状态 —— 否则用户会以为页面卡死了。
+ */
+export async function explainNote(noteId: number): Promise<ExplainResponse> {
+  // 单独给一个更长的超时：axios 默认 15s 不够 LLM 生成
+  const { data } = await client.post<ExplainResponse>(
+    `/notes/${noteId}/explain`,
+    undefined,
+    { timeout: 150_000 },
+  )
   return data
 }

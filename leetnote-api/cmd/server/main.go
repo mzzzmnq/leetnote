@@ -54,11 +54,16 @@ func run() error {
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.HTTPPort),
 		Handler: router.New(cfg, pool),
-		// 这几个超时是防「慢连接攻击」的第一道防线，生产环境必须设
+		// ReadHeaderTimeout 是防「慢连接攻击」的第一道防线，保持较短。
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       60 * time.Second,
+
+		// WriteTimeout 需要放宽到 120s：`POST /notes/:id/explain` 会同步等待
+		// LLM 生成（实测 10s 上下，长笔记可能到 30s+），30s 会把它掐断。
+		// 代价是对慢客户端更宽容了，生产环境应该改成「AI 调用异步化 + 轮询」，
+		// 而不是一味放宽全局超时。
+		WriteTimeout: 120 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	}
 
 	serverErr := make(chan error, 1)

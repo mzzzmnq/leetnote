@@ -41,4 +41,6 @@ async def health(
         embedding_mode="remote" if settings.use_remote_embedding else "local",
         embedding_dim=embedder.dim,
         database=db_status,
+        chat_model=settings.chat_model if settings.use_chat_model else "",
+        chat_enabled=settings.use_chat_model,
     )

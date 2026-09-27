@@ -260,3 +260,13 @@ export interface SimilarNotesResponse {
   items: SimilarNote[]
 }
 
+/** LLM 生成的解法讲解 */
+export interface ExplainResponse {
+  note_id: number
+  model: string
+  /** Markdown 文本 */
+  content: string
+  prompt_tokens: number
+  completion_tokens: number
+}
+

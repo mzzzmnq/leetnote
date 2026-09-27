@@ -51,6 +51,28 @@ class SimilarNote:
     similarity: float
 
 
+@dataclass(frozen=True, slots=True)
+class SolutionRow:
+    title: str
+    language: str
+    code: str
+    time_complexity: str | None
+    space_complexity: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class NoteForExplain:
+    """生成 LLM 讲解所需的全部素材，一次查完。"""
+
+    note_id: int
+    user_id: int
+    title: str
+    content_md: str
+    problem_title: str | None
+    difficulty: str | None
+    solutions: list[SolutionRow]
+
+
 def _to_vector_literal(vec: list[float]) -> str:
     """转成 pgvector 能解析的字面量：[0.1,0.2,...]"""
     return "[" + ",".join(f"{v:.7f}" for v in vec) + "]"
@@ -158,6 +180,58 @@ async def find_similar(user_id: int, note_id: int, limit: int) -> list[SimilarNo
         )
         for r in rows
     ]
+
+
+async def fetch_note_for_explain(note_id: int, user_id: int) -> NoteForExplain | None:
+    """取生成 LLM 讲解所需的素材。
+
+    同时校验归属：传别人的 note_id 会返回 None（而不是别人的内容）。
+    """
+    pool = get_pool()
+
+    async with pool.connection() as conn, conn.cursor() as cur:
+        await cur.execute(
+            """
+            SELECT n.id, n.user_id, n.title, n.content_md, p.title, p.difficulty
+            FROM notes n
+            LEFT JOIN problems p ON p.id = n.problem_id
+            WHERE n.id = %(note_id)s AND n.user_id = %(user_id)s
+            """,
+            {"note_id": note_id, "user_id": user_id},
+        )
+        row = await cur.fetchone()
+        if row is None:
+            return None
+
+        await cur.execute(
+            """
+            SELECT title, language, code, time_complexity, space_complexity
+            FROM solutions
+            WHERE note_id = %(note_id)s
+            ORDER BY sort_order, id
+            """,
+            {"note_id": note_id},
+        )
+        solution_rows = await cur.fetchall()
+
+    return NoteForExplain(
+        note_id=row[0],
+        user_id=row[1],
+        title=row[2] or "",
+        content_md=row[3] or "",
+        problem_title=row[4],
+        difficulty=row[5],
+        solutions=[
+            SolutionRow(
+                title=r[0],
+                language=r[1],
+                code=r[2],
+                time_complexity=r[3],
+                space_complexity=r[4],
+            )
+            for r in solution_rows
+        ],
+    )
 
 
 async def count_embeddings(user_id: int) -> tuple[int, int]:

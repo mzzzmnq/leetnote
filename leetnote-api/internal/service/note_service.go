@@ -325,6 +325,24 @@ func (s *NoteService) FindSimilar(
 	return items, model, nil
 }
 
+// ExplainNote 让 LLM 点评这篇笔记，返回固定结构的讲解。
+func (s *NoteService) ExplainNote(ctx context.Context, userID, noteID int64) (*ai.ExplainResult, error) {
+	if !s.ai.Enabled() {
+		return nil, errs.ErrBadRequest.WithMessage("AI 服务未启用（未配置 AI_SERVICE_URL）")
+	}
+
+	// 先确认笔记归属，越权直接 404，连 AI 服务都不会被打到
+	if _, err := s.notes.GetByID(ctx, userID, noteID); err != nil {
+		return nil, err
+	}
+
+	result, err := s.ai.ExplainNote(ctx, userID, noteID)
+	if err != nil {
+		return nil, errs.ErrInternal.Wrap(err)
+	}
+	return result, nil
+}
+
 // scheduleEmbed 异步触发向量生成。
 //
 // 【为什么异步】embedding 要调外部模型，可能耗时几百毫秒到几秒。

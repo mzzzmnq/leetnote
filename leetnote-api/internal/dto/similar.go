@@ -35,3 +35,23 @@ func NewSimilarNotesResponse(noteID int64, model string, items []ai.SimilarNote)
 
 	return SimilarNotesResponse{NoteID: noteID, Model: model, Items: out}
 }
+
+// ExplainResponse 是 LLM 生成的解法讲解。
+type ExplainResponse struct {
+	NoteID int64  `json:"note_id"`
+	Model  string `json:"model"`
+	// Content 是 Markdown 文本，前端直接用 MarkdownViewer 渲染
+	Content          string `json:"content"`
+	PromptTokens     int    `json:"prompt_tokens"`
+	CompletionTokens int    `json:"completion_tokens"`
+}
+
+func NewExplainResponse(noteID int64, result *ai.ExplainResult) ExplainResponse {
+	return ExplainResponse{
+		NoteID:           noteID,
+		Model:            result.Model,
+		Content:          result.Content,
+		PromptTokens:     result.PromptTokens,
+		CompletionTokens: result.CompletionTokens,
+	}
+}

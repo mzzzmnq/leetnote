@@ -59,6 +59,64 @@ curl http://127.0.0.1:8000/health
 > ⚠️ 换模型时注意维度：`note_embeddings.embedding` 当前是 `vector(1536)`。
 > 换成维度不同的模型（如 `BAAI/bge-m3` 是 1024 维）需要先做一次迁移改列定义。
 
+## 对话模型（LLM 解法讲解）
+
+与 embedding **分开配置** —— 两者常常来自不同供应商。
+
+### 用 OpenCode Go 订阅（推荐，本机已配好）
+
+OpenCode Go 是 $10/月的订阅，包含多种开源编码模型。**它允许第三方客户端调用**，
+但有三条要求（[官方说明](https://opencode.ai/docs/go/#where-can-i-use-it)）：
+
+1. 发送正常的编码 agent 流量
+2. 用**自己的** User-Agent 标识，不能是通用 SDK / HTTP 库的名字
+3. 每个会话带稳定的会话 ID 头 `x-opencode-session`
+
+> ⚠️ 第 3 条是硬性要求，**不带会直接返回 503**：
+> `Request is missing x-opencode-session and cannot be routed efficiently`
+
+**拿到 API Key**：TUI 里执行 `/connect` → 选 `OpenCode Go` → 粘贴 Key。
+本机已登录的话，Key 就在 `~/.local/share/opencode/auth.json` 的 `opencode-go.key`。
+
+**配置**（`.env`）：
+
+```dotenv
+CHAT_API_KEY=oc_sk_xxxxxxxx
+CHAT_BASE_URL=https://opencode.ai/zen/go/v1
+CHAT_MODEL=space-bunny-free
+
+# 上面两条要求由这两个配置满足；换成别的供应商时留空即可
+CHAT_USER_AGENT=leetnote-ai/0.1.0
+CHAT_SESSION_HEADER=x-opencode-session
+```
+
+**选模型的注意点**：
+
+| 模型 | 端点风格 | 备注 |
+|---|---|---|
+| `space-bunny-free` | `/chat/completions` | **限时免费不限量**，默认选择 |
+| `deepseek-v4.1-flash` | `/chat/completions` | 便宜，但是**推理模型** |
+| `qwen3.8-flash` / `minimax-m3` | `/messages`（Anthropic 风格） | 本客户端不支持 |
+| `gpt-6-luna` / `grok-4.7` | `/responses` | 本客户端不支持 |
+
+> **推理模型的坑**：`deepseek` 系列会先产出一大段 reasoning。如果 `max_tokens`
+> 太小，正文会被挤成空字符串（`completion_tokens` 正好等于上限就是被截断的信号）。
+> 客户端已经把默认值放宽到 4000，并且在遇到空内容时明确报错而不是返回空白。
+
+### 换成其他供应商
+
+任何 OpenAI 兼容服务都行（硅基流动 / 智谱 / 通义 / OpenAI）：
+
+```dotenv
+CHAT_API_KEY=sk-xxx
+CHAT_BASE_URL=https://api.siliconflow.cn/v1
+CHAT_MODEL=Qwen/Qwen2.5-7B-Instruct
+CHAT_USER_AGENT=
+CHAT_SESSION_HEADER=
+```
+
+---
+
 ## 三个已知问题（都踩过）
 
 ### 1. 必须用 `run.py` 启动，不能直接 `uvicorn app.main:app`

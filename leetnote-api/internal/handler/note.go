@@ -223,3 +223,25 @@ func (h *NoteHandler) Similar(c *gin.Context) {
 
 	response.OK(c, dto.NewSimilarNotesResponse(id, model, items))
 }
+
+// Explain POST /api/v1/notes/:id/explain
+//
+// 用 POST 而不是 GET：这会真实调用大模型（有成本、有延迟），
+// 而且结果可能随模型更新而变化 —— 语义上是一次「动作」而非幂等读取。
+//
+// 注意：这是同步调用，实测 10s 上下。长笔记可能更久，
+// 所以 http.Server 的 WriteTimeout 放宽到了 120s（见 cmd/server/main.go）。
+func (h *NoteHandler) Explain(c *gin.Context) {
+	id, ok := paramInt64(c, "id")
+	if !ok {
+		return
+	}
+
+	result, err := h.svc.ExplainNote(c.Request.Context(), middleware.MustUserID(c), id)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+
+	response.OK(c, dto.NewExplainResponse(id, result))
+}
