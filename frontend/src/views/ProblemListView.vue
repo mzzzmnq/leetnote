@@ -11,6 +11,7 @@ import {
   NPagination,
   NSelect,
   NSpin,
+  NTag,
   useDialog,
   useMessage,
 } from 'naive-ui'

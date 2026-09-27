@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
-import { NAlert, NButton, NSpin, NTag, useDialog, useMessage } from 'naive-ui'
+import { NAlert, NButton, NEmpty, NSpin, NTag, useDialog, useMessage } from 'naive-ui'
 import { ApiError } from '@/api/client'
 import { deleteNote, explainNote, fetchSimilarNotes, getNote, toggleStar } from '@/api/notes'
 import type { Note, SimilarNote } from '@/api/types'
