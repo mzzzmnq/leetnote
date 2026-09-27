@@ -270,3 +270,36 @@ export interface ExplainResponse {
   completion_tokens: number
 }
 
+// ---------------------------------------------------------------
+// 间隔重复复习（SM-2）
+// ---------------------------------------------------------------
+
+export interface ReviewCard {
+  id: number
+  note_id: number
+  note_title: string
+  note_summary: string | null
+  /** 难度系数，越大越容易，下限 1.3 */
+  ease_factor: number
+  /** 当前间隔天数 */
+  interval_days: number
+  /** 连续答对次数，答错归零 */
+  repetitions: number
+  due_at: string
+  last_reviewed_at: string | null
+}
+
+export interface ForecastPoint {
+  date: string
+  count: number
+}
+
+export interface ReviewStats {
+  due_count: number
+  total_cards: number
+  learned_cards: number
+  total_reviews: number
+  /** 未来 7 天每天到期的数量 */
+  forecast: ForecastPoint[]
+}
+

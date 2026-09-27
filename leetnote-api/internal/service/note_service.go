@@ -17,6 +17,15 @@ import (
 	"github.com/mzzzmnq/leetnote-api/internal/repository"
 )
 
+// CardScheduler 只暴露「确保复习卡存在」这一个能力。
+//
+// 定义成窄接口而不是直接依赖 *ReviewService：
+// NoteService 只需要「建卡」这一件事，依赖整个复习服务会让两者的
+// 变更互相牵连，也不好做测试替身。
+type CardScheduler interface {
+	ScheduleEnsureCard(noteID int64)
+}
+
 // NoteService 是项目的核心业务。
 //
 // 它比其它 service 多持有两个东西：
@@ -29,6 +38,7 @@ type NoteService struct {
 	tags      repository.TagRepository
 	problems  repository.ProblemRepository
 	ai        *ai.Client
+	reviews   CardScheduler
 }
 
 func NewNoteService(
@@ -38,6 +48,7 @@ func NewNoteService(
 	tags repository.TagRepository,
 	problems repository.ProblemRepository,
 	aiClient *ai.Client,
+	reviews CardScheduler,
 ) *NoteService {
 	return &NoteService{
 		pool:      pool,
@@ -46,6 +57,7 @@ func NewNoteService(
 		tags:      tags,
 		problems:  problems,
 		ai:        aiClient,
+		reviews:   reviews,
 	}
 }
 
@@ -102,6 +114,8 @@ func (s *NoteService) Create(ctx context.Context, userID int64, in dto.NoteInput
 
 	// 异步生成向量（失败不影响保存）
 	s.scheduleEmbed(noteID)
+	// 异步建复习卡（幂等）
+	s.ensureReviewCard(noteID)
 	return created, nil
 }
 
@@ -191,7 +205,19 @@ func (s *NoteService) Update(ctx context.Context, userID, id int64, in dto.NoteI
 
 	// 正文变了，向量要重建，否则相似题结果会一直停留在旧内容上
 	s.scheduleEmbed(id)
+	// 复习卡是幂等的；对「上线复习功能之前建的老笔记」也顺手补卡
+	s.ensureReviewCard(id)
 	return updated, nil
+}
+
+// ensureReviewCard 在笔记创建/更新后确保复习卡存在。
+//
+// 复习功能未接时 reviews 为 nil，静默跳过，不影响笔记功能。
+func (s *NoteService) ensureReviewCard(noteID int64) {
+	if s.reviews == nil {
+		return
+	}
+	s.reviews.ScheduleEnsureCard(noteID)
 }
 
 func (s *NoteService) Delete(ctx context.Context, userID, id int64) error {

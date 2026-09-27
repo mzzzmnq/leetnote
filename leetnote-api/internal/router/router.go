@@ -48,6 +48,7 @@ func New(cfg *config.Config, pool *pgxpool.Pool) *gin.Engine {
 	solutionRepo := repository.NewSolutionRepository(pool)
 	statsRepo := repository.NewStatsRepository(pool)
 	searchRepo := repository.NewSearchRepository(pool)
+	reviewRepo := repository.NewReviewRepository(pool)
 
 	githubClient := oauth.NewGitHubClient(
 		cfg.GitHubClientID, cfg.GitHubClientSecret, cfg.GitHubRedirectURL)
@@ -59,7 +60,8 @@ func New(cfg *config.Config, pool *pgxpool.Pool) *gin.Engine {
 	oauthSvc := service.NewOAuthService(userRepo, oauthRepo, githubClient, tokenManager)
 	problemSvc := service.NewProblemService(problemRepo, tagRepo)
 	tagSvc := service.NewTagService(tagRepo)
-	noteSvc := service.NewNoteService(pool, noteRepo, solutionRepo, tagRepo, problemRepo, aiClient)
+	reviewSvc := service.NewReviewService(pool, reviewRepo, noteRepo)
+	noteSvc := service.NewNoteService(pool, noteRepo, solutionRepo, tagRepo, problemRepo, aiClient, reviewSvc)
 	statsSvc := service.NewStatsService(statsRepo)
 	searchSvc := service.NewSearchService(searchRepo, tagRepo, problemRepo)
 
@@ -69,6 +71,7 @@ func New(cfg *config.Config, pool *pgxpool.Pool) *gin.Engine {
 	problemHandler := handler.NewProblemHandler(problemSvc)
 	tagHandler := handler.NewTagHandler(tagSvc)
 	noteHandler := handler.NewNoteHandler(noteSvc)
+	reviewHandler := handler.NewReviewHandler(reviewSvc)
 	statsHandler := handler.NewStatsHandler(statsSvc)
 	searchHandler := handler.NewSearchHandler(searchSvc)
 	healthHandler := handler.NewHealthHandler(pool)
@@ -172,6 +175,14 @@ func New(cfg *config.Config, pool *pgxpool.Pool) *gin.Engine {
 		{
 			stats.GET("/overview", statsHandler.Overview)
 			stats.GET("/trend", statsHandler.Trend)
+		}
+
+		// 间隔重复复习（SM-2）
+		reviews := authed.Group("/reviews")
+		{
+			reviews.GET("/due", reviewHandler.Due)
+			reviews.GET("/stats", reviewHandler.Stats)
+			reviews.POST("/:id/submit", reviewHandler.Submit)
 		}
 
 		// 全文检索（一次返回笔记 + 题目两类结果）

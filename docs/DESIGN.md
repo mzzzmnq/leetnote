@@ -673,11 +673,22 @@ due_at = now() + interval_days 天
 
 #### 复习 `/reviews` 🟦
 
-| 方法 | 路径 | 说明 |
-|---|---|---|
-| GET | `/reviews/due?limit=20` | 今日待复习卡片 |
-| POST | `/reviews/{card_id}/submit` | 提交评分 `{ "rating": 4 }` |
-| GET | `/reviews/stats` | 复习统计 |
+| 方法 | 路径 | 说明 | 状态 |
+|---|---|---|---|
+| GET | `/reviews/due?limit=20` | 当前到期待复习的卡片 | ✅ |
+| POST | `/reviews/{card_id}/submit` | 提交自评 `{ "rating": 4 }`，按 SM-2 更新 | ✅ |
+| GET | `/reviews/stats` | 复习统计 + 未来 7 天到期分布 | ✅ |
+
+**SM-2 算法**（实现在 `internal/service/review_service.go` 的 `ApplySM2`，纯函数）：
+
+```
+rating < 3（没答上来）：连续次数归零，间隔重置为 1 天，但【难度系数保留】
+rating ≥ 3（答对）：  间隔按 1 → 6 → 上次间隔 × 难度系数 增长
+难度系数：EF += 0.1 - (5-q) × (0.08 + (5-q) × 0.02)，下限 1.3
+```
+
+> 「答错时保留难度系数」是容易被简化实现写错的地方：如果把 EF 也重置回 2.5，
+> 一张反复答错的难题就永远不会因为「难」而缩短间隔，复习负担会越滚越大。
 
 #### 前端可见的 AI 能力 🟦
 

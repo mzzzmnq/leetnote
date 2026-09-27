@@ -12,6 +12,7 @@ const dialog = useDialog()
 const navItems = [
   { name: 'dashboard', label: '概览' },
   { name: 'notes', label: '笔记' },
+  { name: 'review', label: '复习' },
   { name: 'problems', label: '题目库' },
   { name: 'search', label: '搜索' },
   { name: 'settings', label: '设置' },
