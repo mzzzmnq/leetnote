@@ -17,6 +17,7 @@ type ProblemFilter struct {
 	Keyword    string // 模糊匹配 title / title_slug
 	Difficulty string // Easy / Medium / Hard
 	TagID      int64  // 按专题/知识点筛选（题单导入的标签）
+	Sort       string // 排序方式，见 problemOrderBy
 	Pagination
 }
 
@@ -38,11 +39,15 @@ func NewProblemRepository(db Querier) ProblemRepository {
 	return &problemRepo{db: db}
 }
 
-const problemColumns = `id, leetcode_id, title, title_slug, difficulty, url, created_at`
+const problemColumns = `
+	id, leetcode_id, title, title_slug, difficulty, url, rating, sort_order, created_at`
 
 func scanProblem(row pgx.Row) (*model.Problem, error) {
 	var p model.Problem
-	err := row.Scan(&p.ID, &p.LeetCodeID, &p.Title, &p.TitleSlug, &p.Difficulty, &p.URL, &p.CreatedAt)
+	err := row.Scan(
+		&p.ID, &p.LeetCodeID, &p.Title, &p.TitleSlug, &p.Difficulty,
+		&p.URL, &p.Rating, &p.SortOrder, &p.CreatedAt,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -65,12 +70,13 @@ func scanProblems(rows pgx.Rows) ([]*model.Problem, error) {
 
 func (r *problemRepo) Create(ctx context.Context, p *model.Problem) error {
 	const q = `
-		INSERT INTO problems (leetcode_id, title, title_slug, difficulty, url)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO problems (leetcode_id, title, title_slug, difficulty, url, rating, sort_order)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id, created_at`
 
 	err := r.db.QueryRow(ctx, q,
-		p.LeetCodeID, p.Title, p.TitleSlug, p.Difficulty, p.URL,
+		p.LeetCodeID, p.Title, p.TitleSlug, p.Difficulty,
+		p.URL, p.Rating, p.SortOrder,
 	).Scan(&p.ID, &p.CreatedAt)
 
 	if err != nil {
@@ -157,9 +163,9 @@ func (r *problemRepo) List(ctx context.Context, f ProblemFilter) ([]*model.Probl
 	args = append(args, f.Limit(), f.Offset())
 	listSQL := fmt.Sprintf(
 		`SELECT %s FROM problems WHERE %s
-		 ORDER BY leetcode_id NULLS LAST, id
+		 ORDER BY %s
 		 LIMIT $%d OFFSET $%d`,
-		problemColumns, where, len(args)-1, len(args))
+		problemColumns, where, problemOrderBy(f.Sort), len(args)-1, len(args))
 
 	rows, err := r.db.Query(ctx, listSQL, args...)
 	if err != nil {
@@ -173,15 +179,54 @@ func (r *problemRepo) List(ctx context.Context, f ProblemFilter) ([]*model.Probl
 	return list, total, nil
 }
 
+// problemOrderBy 把排序参数【白名单化】。
+//
+// 绝不能把用户输入直接拼进 ORDER BY —— 那是 SQL 注入的经典入口。
+//
+// 说明几个排序的业务含义：
+//   - tidan  ：按灵神题单的原始顺序（从易到难），这是题单最有价值的信息
+//   - topic  ：先按专题分组（相向双指针 → 滑动窗口 → …），组内再按题单顺序
+//   - rating ：按社区难度分，比三档难度细得多
+func problemOrderBy(sort string) string {
+	switch sort {
+	case "tidan":
+		// `sort_order = 0` 是布尔表达式，false 排在 true 前面，
+		// 于是「非题单题目」（0）自然落到最后，不用写 NULLS LAST 那种特例
+		return "sort_order = 0, sort_order, leetcode_id NULLS LAST, id"
+
+	case "topic":
+		// 相关子查询取该题所属专题里最小的 sort_order 作为分组键。
+		// 176 行的数据量下这种写法完全够用；量级上来了可以改成物化视图。
+		return `(SELECT min(t.sort_order)
+		           FROM problem_tags pt JOIN tags t ON t.id = pt.tag_id
+		          WHERE pt.problem_id = problems.id) NULLS LAST,
+		        sort_order = 0, sort_order, leetcode_id NULLS LAST, id`
+
+	case "rating":
+		return "rating NULLS LAST, leetcode_id NULLS LAST, id"
+
+	case "rating_desc":
+		return "rating DESC NULLS LAST, leetcode_id NULLS LAST, id"
+
+	case "title":
+		return "title ASC, id"
+
+	default: // leetcode：按题号
+		return "leetcode_id NULLS LAST, id"
+	}
+}
+
 func (r *problemRepo) Update(ctx context.Context, p *model.Problem) (*model.Problem, error) {
 	const q = `
 		UPDATE problems
-		SET leetcode_id = $2, title = $3, title_slug = $4, difficulty = $5, url = $6
+		SET leetcode_id = $2, title = $3, title_slug = $4, difficulty = $5,
+		    url = $6, rating = $7, sort_order = $8
 		WHERE id = $1
 		RETURNING ` + problemColumns
 
 	updated, err := scanProblem(r.db.QueryRow(ctx, q,
-		p.ID, p.LeetCodeID, p.Title, p.TitleSlug, p.Difficulty, p.URL))
+		p.ID, p.LeetCodeID, p.Title, p.TitleSlug, p.Difficulty,
+		p.URL, p.Rating, p.SortOrder))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, errs.ErrNotFound.WithMessage("题目不存在").Wrap(err)

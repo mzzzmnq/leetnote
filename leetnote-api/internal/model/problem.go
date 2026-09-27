@@ -25,6 +25,19 @@ type Problem struct {
 	URL        *string
 	CreatedAt  time.Time
 
+	// Rating 是社区统计的难度分（如 1400 / 1700 / 2400）。
+	//
+	// LeetCode 官方只给三档难度，粒度太粗——同为 Medium，
+	// 有的 1400 分有的 2600 分，难度天差地别。
+	// 数据来自 zerotrac/leetcode_problem_rating，NULL 表示暂无数据。
+	Rating *float64
+
+	// SortOrder 是该题在题单里的【原始顺序】。
+	//
+	// 题单是从易到难排的，这个顺序本身携带信息；按题号排序会把它打乱。
+	// 0 表示不属于任何题单（手工录入的题目）。
+	SortOrder int
+
 	// Tags 是题目所属的专题/知识点（按需填充，列表与详情都会带）
 	Tags []*Tag
 }

@@ -34,17 +34,20 @@ func main() {
 
 func run() error {
 	var (
-		file      string
-		dryRun    bool
-		skipFetch bool
-		fallback  string
-		maxN      int
+		file           string
+		dryRun         bool
+		skipFetch      bool
+		fallback       string
+		maxN           int
+		ratingsFileArg string
 	)
 	flag.StringVar(&file, "file", "", "题单 markdown 文件路径（必填）")
 	flag.BoolVar(&dryRun, "dry-run", false, "只解析并打印统计，不写数据库")
 	flag.BoolVar(&skipFetch, "skip-fetch", false, "跳过 LeetCode 接口调用（难度用 fallback 值填充）")
 	flag.StringVar(&fallback, "fallback-difficulty", "Medium", "LeetCode 上找不到对应题目时使用的难度")
 	flag.IntVar(&maxN, "max", 0, "最多导入多少道题（0 表示不限，用于试跑）")
+	flag.StringVar(&ratingsFileArg, "ratings-file", "",
+		"本地难度分文件（不填则从 GitHub CDN 下载；网络不通时可自己下载一份传进来）")
 	flag.Parse()
 
 	if file == "" {
@@ -79,10 +82,10 @@ func run() error {
 		fmt.Printf("   （已截断到前 %d 道）\n", maxN)
 	}
 
-	// ---------- 2. 补齐难度 ----------
+	// ---------- 2. 补齐难度与难度分 ----------
 	difficulties := map[string]string{}
 	if skipFetch {
-		fmt.Printf("⏭  跳过 LeetCode 接口，全部使用 fallback 难度 %s\n", fallback)
+		fmt.Printf("⏭  跳过外部接口，全部使用 fallback 难度 %s\n", fallback)
 	} else {
 		fmt.Println("🌐 从 LeetCode 拉取题目难度（题单里没有这个字段）...")
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -95,18 +98,60 @@ func run() error {
 		fmt.Printf("   共获取 %d 道题的难度\n", len(difficulties))
 	}
 
-	missing := make([]TidanEntry, 0, 16)
-	for i := range entries {
-		if d := difficulties[entries[i].Slug]; d != "" {
-			entries[i].Difficulty = d
+	// ---------- 3. 补齐难度分 ----------
+	ratings := map[string]float64{}
+	switch {
+	case ratingsFileArg != "":
+		fmt.Printf("📄 从本地文件读取难度分: %s\n", ratingsFileArg)
+		ratings, err = LoadRatingsFile(ratingsFileArg)
+		if err != nil {
+			fmt.Printf("   ⚠️  读取失败（不影响导入）: %v\n", err)
 		} else {
-			entries[i].Difficulty = fallback
-			missing = append(missing, entries[i])
+			fmt.Printf("   共读取 %d 道题的难度分\n", len(ratings))
+		}
+
+	case !skipFetch:
+		fmt.Println("🌐 拉取社区难度分（zerotrac/leetcode_problem_rating）...")
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		defer cancel()
+
+		ratings, err = FetchRatings(ctx)
+		if err != nil {
+			// 难度分是加分项，拉不到不该阻断整个导入
+			fmt.Printf("   ⚠️  难度分拉取失败（不影响导入）: %v\n", err)
+			if len(entries) > 0 {
+				fmt.Printf("      可用 -ratings-file 指定本地文件后重试\n")
+			}
+		} else {
+			fmt.Printf("   共获取 %d 道题的难度分\n", len(ratings))
 		}
 	}
 
+	missing := make([]TidanEntry, 0, 16)
+	rated := 0
+	for i := range entries {
+		if d := difficulties[entries[i].Slug]; d != "" {
+			entries[i].Difficulty = d
+			entries[i].DifficultyKnown = true
+		} else {
+			// 占位值。写库时会被已有题目的旧难度覆盖（见 upsertProblems），
+			// 只有真正新增的题目才会用上它。
+			entries[i].Difficulty = fallback
+			entries[i].DifficultyKnown = false
+			missing = append(missing, entries[i])
+		}
+
+		if r, ok := ratings[entries[i].Slug]; ok {
+			v := r
+			entries[i].Rating = &v
+			rated++
+		}
+	}
+	fmt.Printf("   其中 %d 道题匹配到了难度分\n", rated)
+
 	if len(missing) > 0 {
-		fmt.Printf("   ⚠️  %d 道题未在 LeetCode 上匹配到，已用 %s 填充：\n", len(missing), fallback)
+		fmt.Printf("   ⚠️  %d 道题未在 LeetCode 上匹配到（新增的用 %s 填充，已有的沿用原值）：\n",
+			len(missing), fallback)
 		for i, e := range missing {
 			if i >= 8 {
 				fmt.Printf("      ...（其余 %d 道略）\n", len(missing)-8)
@@ -211,7 +256,15 @@ func ensureTopicTags(ctx context.Context, tagRepo repository.TagRepository, entr
 
 	topicIDs := make(map[string]int64, 32)
 	for i, topic := range Topics(entries) {
+		// 保留题单里的专题顺序，前端就能按「相向双指针 → 滑动窗口 → 二分」展示
+		order := i + 1
+
 		if id, ok := byName[topic]; ok {
+			// 复用了用户手工建的同名标签。这里【不能】直接 continue ——
+			// 那样它的 sort_order 会一直是 0，专题排序就整列失效了。
+			if err := tagRepo.UpdateMeta(ctx, id, model.TagKindTopic, order); err != nil {
+				return nil, stats, fmt.Errorf("更新专题标签 %q 失败: %w", topic, err)
+			}
 			topicIDs[topic] = id
 			stats.reused++
 			continue
@@ -220,8 +273,9 @@ func ensureTopicTags(ctx context.Context, tagRepo repository.TagRepository, entr
 		created, err := tagRepo.FindOrCreate(ctx, &model.Tag{
 			Name: topic,
 			// slug 用序号保证唯一且 ASCII 安全；展示一律用中文 name
-			Slug: fmt.Sprintf("tidan-%02d", i+1),
-			Kind: model.TagKindTopic,
+			Slug:      fmt.Sprintf("tidan-%02d", i+1),
+			Kind:      model.TagKindTopic,
+			SortOrder: order,
 		})
 		if err != nil {
 			return nil, stats, fmt.Errorf("创建专题标签 %q 失败: %w", topic, err)
@@ -240,33 +294,83 @@ func ensureTopicTags(ctx context.Context, tagRepo repository.TagRepository, entr
 func upsertProblems(ctx context.Context, tx pgx.Tx, entries []TidanEntry) (map[string]int64, int, int, error) {
 	lcIDs := make([]int, 0, len(entries))
 	titles := make([]string, 0, len(entries))
-	slugs := make([]string, 0, len(entries))
 	diffs := make([]string, 0, len(entries))
+	urls := make([]string, 0, len(entries))
+	ratings := make([]*float64, 0, len(entries))
+	orders := make([]int, 0, len(entries))
 
+	// 先把 slug 收集好 —— 下面查「已有题目」要用，必须早于查询
+	slugs := make([]string, 0, len(entries))
 	for _, e := range entries {
+		slugs = append(slugs, e.Slug)
+	}
+
+	// 取出已有题目的 slug -> 难度。
+	//
+	// 【为什么需要】-skip-fetch（或 LeetCode 接口挂了）时，拉不到难度的题
+	// 会被填成 -fallback-difficulty 的占位值。如果直接写库，库里原本正确的
+	// 难度就被这个占位值覆盖了 —— 实测一次 -skip-fetch 就把 172 道题的难度
+	// 全冲成了 Medium（接雨水、最小覆盖子串本来是 Hard）。
+	//
+	// 所以：难度是占位值、且库里已有这道题时，沿用旧值。
+	existingDiffs := make(map[string]string, len(entries))
+	rows0, err := tx.Query(ctx,
+		`SELECT title_slug, difficulty FROM problems WHERE title_slug = ANY($1)`, slugs)
+	if err != nil {
+		return nil, 0, 0, fmt.Errorf("查询已有题目失败: %w", err)
+	}
+	for rows0.Next() {
+		var slug, diff string
+		if err := rows0.Scan(&slug, &diff); err != nil {
+			rows0.Close()
+			return nil, 0, 0, fmt.Errorf("读取已有题目失败: %w", err)
+		}
+		existingDiffs[slug] = diff
+	}
+	rows0.Close()
+	if err := rows0.Err(); err != nil {
+		return nil, 0, 0, fmt.Errorf("遍历已有题目失败: %w", err)
+	}
+
+	kept := 0
+	for _, e := range entries {
+		diff := e.Difficulty
+		if !e.DifficultyKnown {
+			if old, ok := existingDiffs[e.Slug]; ok {
+				diff = old // 沿用库里已有的难度，别用占位值覆盖
+				kept++
+			}
+		}
+
 		lcIDs = append(lcIDs, e.LeetCodeID)
 		titles = append(titles, e.Title)
-		slugs = append(slugs, e.Slug)
-		diffs = append(diffs, e.Difficulty)
+		diffs = append(diffs, diff)
+		urls = append(urls, e.URL)
+		ratings = append(ratings, e.Rating)
+		orders = append(orders, e.Order)
+	}
+	if kept > 0 {
+		fmt.Printf("   ℹ️  %d 道题未拉到难度，已沿用库中原值\n", kept)
 	}
 
-	// 先统计已有多少道，用于区分「新增」与「更新」
-	var existed int
-	if err := tx.QueryRow(ctx,
-		`SELECT count(*) FROM problems WHERE title_slug = ANY($1)`, slugs).Scan(&existed); err != nil {
-		return nil, 0, 0, fmt.Errorf("统计已有题目失败: %w", err)
-	}
+	existed := len(existingDiffs)
 
 	const q = `
-		INSERT INTO problems (leetcode_id, title, title_slug, difficulty)
-		SELECT unnest($1::int[]), unnest($2::text[]), unnest($3::text[]), unnest($4::text[])
+		INSERT INTO problems (leetcode_id, title, title_slug, difficulty, url, rating, sort_order)
+		SELECT unnest($1::int[]), unnest($2::text[]), unnest($3::text[]),
+		       unnest($4::text[]), unnest($5::text[]),
+		       unnest($6::real[]), unnest($7::int[])
 		ON CONFLICT (title_slug) DO UPDATE
 		SET leetcode_id = EXCLUDED.leetcode_id,
 		    title      = EXCLUDED.title,
-		    difficulty = EXCLUDED.difficulty
+		    difficulty = EXCLUDED.difficulty,
+		    url        = EXCLUDED.url,
+		    -- 难度分是外部数据，拉取失败时不要用 NULL 覆盖掉已有值
+		    rating     = COALESCE(EXCLUDED.rating, problems.rating),
+		    sort_order = EXCLUDED.sort_order
 		RETURNING id, title_slug`
 
-	rows, err := tx.Query(ctx, q, lcIDs, titles, slugs, diffs)
+	rows, err := tx.Query(ctx, q, lcIDs, titles, slugs, diffs, urls, ratings, orders)
 	if err != nil {
 		return nil, 0, 0, fmt.Errorf("写入题目失败: %w", err)
 	}

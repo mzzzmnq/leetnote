@@ -317,9 +317,22 @@ CREATE TABLE problems (
     difficulty  VARCHAR(10)  NOT NULL
                 CHECK (difficulty IN ('Easy', 'Medium', 'Hard')),
     url         TEXT,
+
+    -- 社区统计的难度分（000006 迁移加入）。
+    -- 官方三档难度粒度太粗——同为 Medium，1400 分和 2400 分完全不是一个量级。
+    -- 来自 zerotrac/leetcode_problem_rating，NULL 表示该题早于竞赛时代、无数据。
+    rating      REAL,
+
+    -- 在灵神题单里的原始顺序（000006 迁移加入）。
+    -- 题单是从易到难编排的，这个顺序本身携带信息；按题号排会打乱难度曲线。
+    -- 0 表示不属于任何题单（手工录入的题）。
+    sort_order  INTEGER NOT NULL DEFAULT 0,
+
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_problems_difficulty ON problems (difficulty);
+CREATE INDEX idx_problems_rating     ON problems (rating);
+CREATE INDEX idx_problems_sort_order ON problems (sort_order);
 
 -- ============ 标签 ============
 CREATE TABLE tags (
@@ -328,6 +341,8 @@ CREATE TABLE tags (
     slug       VARCHAR(50) NOT NULL UNIQUE,     -- 机器名，如 dynamic-programming
     kind       VARCHAR(20) NOT NULL DEFAULT 'algorithm'
                CHECK (kind IN ('algorithm', 'data_structure', 'topic')),
+    -- 题单里的专题顺序（000006 迁移加入），用于还原「相向双指针 → 滑动窗口 → 二分」
+    sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -432,20 +447,55 @@ cd leetnote-api
 # 干跑：只解析不写库，先看统计
 go run ./cmd/importer -file D:\dev\_downloads\lingshen-tidan.md -dry-run
 
-# 正式导入（会调 LeetCode 接口补难度）
+# 正式导入（会调 LeetCode 接口补难度 + 拉社区难度分）
 go run ./cmd/importer -file D:\dev\_downloads\lingshen-tidan.md
 
 # 试跑前 20 道
 go run ./cmd/importer -file xxx.md -max 20
+
+# 网络不通时用本地难度分文件（GitHub 在国内不稳，见下）
+go run ./cmd/importer -file xxx.md -ratings-file D:\dev\_downloads\ratings.txt
 ```
 
 **为什么需要单独导入**：LeetCode 官方接口只给「英文标题 + slug + 难度」，
-灵神的题单给的是「中文标题 + 专题归属」。两者**按 slug 关联**，
-合并后才能得到「中文标题 + 难度 + 专题」的完整数据。
+灵神的题单给的是「中文标题 + 专题归属 + **专题内顺序**」。两者**按 slug 关联**，
+合并后才能得到「中文标题 + 难度 + 难度分 + 专题 + 顺序」的完整数据。
 
 **工具是幂等的**：重复执行只更新已有记录，不产生重复数据。
 
+导入时会补齐题单里没有的四样东西：
+
+| 字段 | 来源 | 落地方式 |
+|---|---|---|
+| `difficulty` | LeetCode GraphQL（4064 道题一次拉完） | 按 slug 匹配，匹配不到用 `-fallback-difficulty` |
+| `rating` | `zerotrac/leetcode_problem_rating` | 按 slug 匹配 |
+| `url` | 由 slug 拼出 | `https://leetcode.cn/problems/<slug>/` |
+| `sort_order` | 题单本身 | 解析时的行序号；标签侧同理取专题序号 |
+
+两个容易踩的坑，代码里都做了处理：
+
+- **难度分写入用 `COALESCE(EXCLUDED.rating, problems.rating)`**：难度分是外部数据，
+  拉取失败时不能让 NULL 把库里已有的值覆盖掉。实测这个设计救过一次——
+  重跑导入时 CDN 正好超时，73 条难度分一条没丢。
+- **难度同样不能降级**：`-skip-fetch`（或 LeetCode 接口挂了）时拉不到难度，会用
+  `-fallback-difficulty` 填占位值。如果直接写库，库里原本正确的难度会被这个占位值
+  覆盖 —— 实测一次 `-skip-fetch` 就把 172 道题的难度全冲成了 Medium（接雨水、
+  最小覆盖子串本来是 Hard）。所以写库前先查一次已有难度，占位值遇到已有题目就沿用旧值。
+- **复用已有标签时也要 `UpdateMeta`**：题单里的「滑动窗口」「二分查找」很可能和
+  用户手工建的同名标签撞名。按名字复用时如果直接 `continue`，那个标签的
+  `sort_order` 会一直是 0，专题排序整列失效。
+
+> 这三条是同一个原则：**导入是「用新数据补充」，不是「用本次结果覆盖」**。
+> 任何一次外部依赖失败，都不该让库里已有的正确数据变差。
+
+> **难度分的覆盖边界**：数据是从**竞赛**表现反推的，而 LeetCode 竞赛从 2018 年
+> （约 700 多题）才开始，所以早期经典题（1. 两数之和、15. 三数之和、42. 接雨水）
+> 没有分数。实测题单覆盖 73/172 ≈ 42%，缺的全部是竞赛时代之前的老题。
+> 灵神推荐的 `huxulm/lc-rating` 插件数据也完全来自这里（已逐条比对确认无额外覆盖），
+> 所以这是免费数据源的上限，不是实现问题。
+
 > 数据来源：[EndlessCheng/codeforces-go · leetcode/README.md](https://github.com/EndlessCheng/codeforces-go/blob/master/leetcode/README.md)
+> 难度分来源：[zerotrac/leetcode_problem_rating](https://github.com/zerotrac/leetcode_problem_rating)
 
 ### 5.3 中文全文检索
 
@@ -623,12 +673,28 @@ due_at = now() + interval_days 天
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/problems` | 列表，支持 `keyword` `difficulty` 筛选 + 分页 |
+| GET | `/problems` | 列表，支持 `keyword` `difficulty` `tag_id` `sort` 筛选 + 分页 |
 | GET | `/problems/{id}` | 详情 |
 | POST | `/problems` | 手动新增题目 |
 | PUT | `/problems/{id}` | 全量修改 |
 | DELETE | `/problems/{id}` | 删除 |
-| POST | `/problems/import` | 批量导入（开源数据集） |
+
+`sort` 的取值走**白名单**（非法值返回 422，不会拼进 SQL）：
+
+| 值 | 含义 | 实际 ORDER BY |
+|---|---|---|
+| `tidan`（默认） | 题单顺序，从易到难 | `sort_order = 0, sort_order, leetcode_id, id` |
+| `leetcode` | 题号 | `leetcode_id NULLS LAST, id` |
+| `topic` | 先按专题分组，组内按题单顺序 | 相关子查询取该题专题的最小 `sort_order` |
+| `rating` / `rating_desc` | 难度分升 / 降序 | `rating [DESC] NULLS LAST, leetcode_id, id` |
+| `title` | 标题 | `title, id` |
+
+两个设计点：
+
+- `sort_order = 0` 是布尔表达式，PostgreSQL 里 `false < true`，所以「非题单题目」
+  （`sort_order = 0`）自然落到最后，不用额外写特例。
+- 每个排序都补了 `id` 作为**最后的 tiebreaker**。缺了它，等值行在不同查询间的
+  相对顺序不确定，翻页时会出现「第 1 页和第 2 页有重复行」。
 
 #### 笔记 `/notes` 🟦
 

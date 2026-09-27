@@ -90,6 +90,18 @@ export interface Problem {
   difficulty: Difficulty
   url: string | null
   created_at: string
+  /**
+   * 社区统计的难度分（如 1400 / 1710 / 2400）。
+   *
+   * LeetCode 官方只给三档难度，粒度太粗：同为 Medium，1400 分和 2600 分
+   * 难度天差地别。数据来自 zerotrac/leetcode_problem_rating。
+   *
+   * null 表示没有数据 —— 该数据由竞赛表现反推，竞赛时代（2018）之前
+   * 的老题（如 1. 两数之和、15. 三数之和）没有分。
+   */
+  rating: number | null
+  /** 在灵神题单里的原始顺序，0 表示不属于题单（手工录入的题） */
+  sort_order: number
   /** 所属专题/知识点（题单导入时写入） */
   tags: Tag[]
 }
@@ -116,6 +128,8 @@ export interface Tag {
   slug: string
   kind: TagKind
   created_at: string
+  /** 题单里的专题顺序，0 表示非题单标签 */
+  sort_order: number
 }
 
 export interface TagInput {
@@ -187,10 +201,14 @@ export interface NoteQuery {
   size?: number
 }
 
+/** 排序方式：leetcode 题号 / tidan 题单顺序 / topic 按专题 / rating 难度分 */
+export type ProblemSort = 'leetcode' | 'tidan' | 'topic' | 'rating' | 'rating_desc' | 'title'
+
 export interface ProblemQuery {
   keyword?: string
   difficulty?: Difficulty | ''
   tag_id?: number
+  sort?: ProblemSort
   page?: number
   size?: number
 }

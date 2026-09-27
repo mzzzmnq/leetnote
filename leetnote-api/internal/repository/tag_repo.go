@@ -30,6 +30,12 @@ type TagRepository interface {
 	// FindOrCreate 按 slug 查找标签，不存在则创建（导入时用，保证可重复执行）
 	FindOrCreate(ctx context.Context, t *model.Tag) (*model.Tag, error)
 
+	// UpdateMeta 更新标签的分类与排序。
+	//
+	// 导入时用：题单里的「滑动窗口」可能复用了用户已建的同名标签，
+	// 此时不该新建一个同名标签，而应该把题单的排序信息补到已有标签上。
+	UpdateMeta(ctx context.Context, id int64, kind string, sortOrder int) error
+
 	// CountExisting 返回给定 ID 中真实存在的个数，用于校验用户传的 tag_ids
 	CountExisting(ctx context.Context, ids []int64) (int64, error)
 }
@@ -42,11 +48,11 @@ func NewTagRepository(db Querier) TagRepository {
 	return &tagRepo{db: db}
 }
 
-const tagColumns = `id, name, slug, kind, created_at`
+const tagColumns = `id, name, slug, kind, sort_order, created_at`
 
 func scanTag(row pgx.Row) (*model.Tag, error) {
 	var t model.Tag
-	err := row.Scan(&t.ID, &t.Name, &t.Slug, &t.Kind, &t.CreatedAt)
+	err := row.Scan(&t.ID, &t.Name, &t.Slug, &t.Kind, &t.SortOrder, &t.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -55,11 +61,12 @@ func scanTag(row pgx.Row) (*model.Tag, error) {
 
 func (r *tagRepo) Create(ctx context.Context, t *model.Tag) error {
 	const q = `
-		INSERT INTO tags (name, slug, kind)
-		VALUES ($1, $2, $3)
+		INSERT INTO tags (name, slug, kind, sort_order)
+		VALUES ($1, $2, $3, $4)
 		RETURNING id, created_at`
 
-	err := r.db.QueryRow(ctx, q, t.Name, t.Slug, t.Kind).Scan(&t.ID, &t.CreatedAt)
+	err := r.db.QueryRow(ctx, q, t.Name, t.Slug, t.Kind, t.SortOrder).
+		Scan(&t.ID, &t.CreatedAt)
 	if err != nil {
 		switch {
 		case isUniqueViolation(err, "tags_name_key"):
@@ -94,7 +101,8 @@ func (r *tagRepo) List(ctx context.Context, kind string) ([]*model.Tag, error) {
 		conditions = "kind = $1"
 	}
 
-	q := `SELECT ` + tagColumns + ` FROM tags WHERE ` + conditions + ` ORDER BY kind, id`
+	q := `SELECT ` + tagColumns + ` FROM tags WHERE ` + conditions +
+		` ORDER BY sort_order = 0, sort_order, kind, id`
 
 	rows, err := r.db.Query(ctx, q, args...)
 	if err != nil {
@@ -155,7 +163,7 @@ func (r *tagRepo) ListByNoteIDs(ctx context.Context, noteIDs []int64) (map[int64
 	}
 
 	const q = `
-		SELECT nt.note_id, t.id, t.name, t.slug, t.kind, t.created_at
+		SELECT nt.note_id, t.id, t.name, t.slug, t.kind, t.sort_order, t.created_at
 		FROM note_tags nt
 		JOIN tags t ON t.id = nt.tag_id
 		WHERE nt.note_id = ANY($1)
@@ -171,7 +179,7 @@ func (r *tagRepo) ListByNoteIDs(ctx context.Context, noteIDs []int64) (map[int64
 	for rows.Next() {
 		var noteID int64
 		var t model.Tag
-		if err := rows.Scan(&noteID, &t.ID, &t.Name, &t.Slug, &t.Kind, &t.CreatedAt); err != nil {
+		if err := rows.Scan(&noteID, &t.ID, &t.Name, &t.Slug, &t.Kind, &t.SortOrder, &t.CreatedAt); err != nil {
 			return nil, fmt.Errorf("扫描笔记标签失败: %w", err)
 		}
 		out[noteID] = append(out[noteID], &t)
@@ -202,16 +210,33 @@ func (r *tagRepo) CountExisting(ctx context.Context, ids []int64) (int64, error)
 // 这让导入脚本可以【重复执行】而不产生重复标签。
 func (r *tagRepo) FindOrCreate(ctx context.Context, t *model.Tag) (*model.Tag, error) {
 	const q = `
-		INSERT INTO tags (name, slug, kind)
-		VALUES ($1, $2, $3)
-		ON CONFLICT (slug) DO UPDATE SET slug = EXCLUDED.slug
+		INSERT INTO tags (name, slug, kind, sort_order)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (slug) DO UPDATE
+		SET name       = EXCLUDED.name,
+		    kind       = EXCLUDED.kind,
+		    sort_order = EXCLUDED.sort_order
 		RETURNING ` + tagColumns
 
-	out, err := scanTag(r.db.QueryRow(ctx, q, t.Name, t.Slug, t.Kind))
+	out, err := scanTag(r.db.QueryRow(ctx, q, t.Name, t.Slug, t.Kind, t.SortOrder))
 	if err != nil {
 		return nil, fmt.Errorf("创建或查询标签失败: %w", err)
 	}
 	return out, nil
+}
+
+// UpdateMeta 更新标签的分类与排序（导入时同步题单信息用）。
+func (r *tagRepo) UpdateMeta(ctx context.Context, id int64, kind string, sortOrder int) error {
+	const q = `UPDATE tags SET kind = $2, sort_order = $3 WHERE id = $1`
+
+	tag, err := r.db.Exec(ctx, q, id, kind, sortOrder)
+	if err != nil {
+		return fmt.Errorf("更新标签失败: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return errs.ErrNotFound.WithMessage("标签不存在")
+	}
+	return nil
 }
 
 // SetProblemTags 全量替换题目的标签，逻辑与 SetNoteTags 一致。
@@ -240,7 +265,7 @@ func (r *tagRepo) ListByProblemIDs(ctx context.Context, problemIDs []int64) (map
 	}
 
 	const q = `
-		SELECT pt.problem_id, t.id, t.name, t.slug, t.kind, t.created_at
+		SELECT pt.problem_id, t.id, t.name, t.slug, t.kind, t.sort_order, t.created_at
 		FROM problem_tags pt
 		JOIN tags t ON t.id = pt.tag_id
 		WHERE pt.problem_id = ANY($1)
@@ -256,7 +281,7 @@ func (r *tagRepo) ListByProblemIDs(ctx context.Context, problemIDs []int64) (map
 	for rows.Next() {
 		var problemID int64
 		var t model.Tag
-		if err := rows.Scan(&problemID, &t.ID, &t.Name, &t.Slug, &t.Kind, &t.CreatedAt); err != nil {
+		if err := rows.Scan(&problemID, &t.ID, &t.Name, &t.Slug, &t.Kind, &t.SortOrder, &t.CreatedAt); err != nil {
 			return nil, fmt.Errorf("扫描题目标签失败: %w", err)
 		}
 		out[problemID] = append(out[problemID], &t)

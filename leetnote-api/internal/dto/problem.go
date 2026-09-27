@@ -23,6 +23,8 @@ type ProblemQuery struct {
 	Keyword    string `form:"keyword" binding:"max=100"`
 	Difficulty string `form:"difficulty" binding:"omitempty,oneof=Easy Medium Hard"`
 	TagID      int64  `form:"tag_id"`
+	// 排序方式：leetcode(题号) / tidan(题单顺序) / topic(按专题) / rating / rating_desc
+	Sort string `form:"sort" binding:"omitempty,oneof=leetcode tidan topic rating rating_desc title"`
 	PageQuery
 }
 
@@ -34,7 +36,15 @@ type ProblemResponse struct {
 	Difficulty string    `json:"difficulty"`
 	URL        *string   `json:"url"`
 	CreatedAt  time.Time `json:"created_at"`
-	// Tags 是题目所属的专题/知识点（由题单导入或手工维护）
+
+	// Rating 是社区统计的难度分（1400/1700/2400…），NULL 表示暂无数据。
+	// 比 Easy/Medium/Hard 细得多：同为 Medium，1400 分和 2600 分差得很远。
+	Rating *float64 `json:"rating"`
+
+	// SortOrder 是在题单里的原始顺序，0 表示不属于任何题单
+	SortOrder int `json:"sort_order"`
+
+	// Tags 是题目所属的专题/知识点（按需填充，列表与详情都会带）
 	Tags []TagResponse `json:"tags"`
 }
 
@@ -50,6 +60,8 @@ func NewProblemResponse(p *model.Problem) ProblemResponse {
 		Difficulty: p.Difficulty,
 		URL:        p.URL,
 		CreatedAt:  p.CreatedAt,
+		Rating:     p.Rating,
+		SortOrder:  p.SortOrder,
 		// p.Tags 为 nil 时会得到空切片，JSON 里是 [] 而不是 null，前端不用判空
 		Tags: NewTagResponses(p.Tags),
 	}

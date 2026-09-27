@@ -54,7 +54,16 @@ func authHeader(token string) map[string]string {
 }
 
 // createNoteFixture 建好标签与题目，返回它们的 ID。
-func createNoteFixture(t *testing.T, r *gin.Engine, token string) (tagID, problemID int64) {
+//
+// 【务必清理】problems 与 tags 都是【全局表】，不像 notes 那样会随用户级联删除。
+// 早期这里忘了清理，导致每跑一次测试就往开发库里塞一条 "Two Sum"，
+// 跑几次就在题目库里看到一堆重复项。
+func createNoteFixture(
+	t *testing.T,
+	r *gin.Engine,
+	pool *pgxpool.Pool,
+	token string,
+) (tagID, problemID int64) {
 	t.Helper()
 
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
@@ -76,6 +85,14 @@ func createNoteFixture(t *testing.T, r *gin.Engine, token string) (tagID, proble
 	}
 	var problem dto.ProblemResponse
 	_ = json.Unmarshal(w.Body.Bytes(), &problem)
+
+	t.Cleanup(func() {
+		ctx := context.Background()
+		// 先删题目：它被 notes.problem_id 引用（ON DELETE SET NULL，不会级联）
+		_, _ = pool.Exec(ctx, `DELETE FROM problems WHERE id = $1`, problem.ID)
+		// 再删标签：note_tags 上是 CASCADE，会一并清理关联
+		_, _ = pool.Exec(ctx, `DELETE FROM tags WHERE id = $1`, tag.ID)
+	})
 
 	return tag.ID, problem.ID
 }
@@ -110,7 +127,7 @@ func TestNoteLifecycle(t *testing.T) {
 	r := router.New(testConfig(), pool)
 	token, _ := registerAndLogin(t, r, pool)
 
-	tagID, problemID := createNoteFixture(t, r, token)
+	tagID, problemID := createNoteFixture(t, r, pool, token)
 
 	// ---------- 创建 ----------
 	w := doJSON(t, r, http.MethodPost, "/api/v1/notes", noteInput(problemID, tagID), authHeader(token))
@@ -204,7 +221,7 @@ func TestNoteCrossUserIsolation(t *testing.T) {
 	tokenA, _ := registerAndLogin(t, r, pool)
 	tokenB, _ := registerAndLogin(t, r, pool)
 
-	tagID, problemID := createNoteFixture(t, r, tokenA)
+	tagID, problemID := createNoteFixture(t, r, pool, tokenA)
 
 	w := doJSON(t, r, http.MethodPost, "/api/v1/notes", noteInput(problemID, tagID), authHeader(tokenA))
 	if w.Code != http.StatusCreated {

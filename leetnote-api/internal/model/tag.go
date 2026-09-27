@@ -22,4 +22,8 @@ type Tag struct {
 	Slug      string
 	Kind      string
 	CreatedAt time.Time
+
+	// SortOrder 是该标签在题单里的出现顺序（0 表示非题单标签）。
+	// 用于还原「相向双指针 → 滑动窗口 → 二分查找」这样的专题顺序。
+	SortOrder int
 }

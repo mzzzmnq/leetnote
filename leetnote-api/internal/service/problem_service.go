@@ -50,6 +50,7 @@ func (s *ProblemService) List(ctx context.Context, q dto.ProblemQuery) ([]*model
 		Keyword:    q.Keyword,
 		Difficulty: q.Difficulty,
 		TagID:      q.TagID,
+		Sort:       q.Sort,
 		Pagination: repository.Pagination{Page: page, Size: size},
 	})
 	if err != nil {

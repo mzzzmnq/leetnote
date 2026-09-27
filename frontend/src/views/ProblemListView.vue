@@ -18,8 +18,9 @@ import {
 import { ApiError } from '@/api/client'
 import { createProblem, deleteProblem, listProblems, updateProblem } from '@/api/problems'
 import { listTags } from '@/api/tags'
-import type { Difficulty, Problem, ProblemInput, Tag } from '@/api/types'
+import type { Difficulty, Problem, ProblemInput, ProblemSort, Tag } from '@/api/types'
 import DifficultyTag from '@/components/DifficultyTag.vue'
+import RatingBadge from '@/components/RatingBadge.vue'
 
 const message = useMessage()
 const dialog = useDialog()
@@ -37,6 +38,17 @@ const DIFFICULTY_OPTIONS = [
   { label: '困难', value: 'Hard' },
 ]
 
+// 「题单顺序」放在第一个并设为默认：题单是从易到难编排的，
+// 按这个顺序刷题才符合灵神的编排意图；按题号排会打乱难度曲线。
+const SORT_OPTIONS: { label: string; value: ProblemSort }[] = [
+  { label: '题单顺序', value: 'tidan' },
+  { label: '题号', value: 'leetcode' },
+  { label: '按专题', value: 'topic' },
+  { label: '难度分（低→高）', value: 'rating' },
+  { label: '难度分（高→低）', value: 'rating_desc' },
+  { label: '标题', value: 'title' },
+]
+
 // tagId = 0 表示「全部专题」（Naive UI 的 Select 不接受 null 作为 option value）
 const ALL_TAGS = 0
 
@@ -44,6 +56,7 @@ const query = reactive({
   keyword: '',
   difficulty: '' as Difficulty | '',
   tagId: ALL_TAGS,
+  sort: 'tidan' as ProblemSort,
   page: 1,
   size: 15,
 })
@@ -74,6 +87,7 @@ async function fetchProblems(): Promise<void> {
       keyword: query.keyword.trim() || undefined,
       difficulty: query.difficulty || undefined,
       tag_id: query.tagId > 0 ? query.tagId : undefined,
+      sort: query.sort,
       page: query.page,
       size: query.size,
     })
@@ -181,7 +195,10 @@ onMounted(() => {
     <header class="list-head">
       <div>
         <h1 class="page__title">题目库</h1>
-        <p class="page__subtitle">共 {{ total }} 道题。题目是全局共享的元数据。</p>
+        <p class="page__subtitle">
+          共 {{ total }} 道题。难度分由社区按竞赛表现统计，比三档难度细得多；
+          显示「—」表示该题早于 LeetCode 竞赛时代，没有难度分数据。
+        </p>
       </div>
       <n-button type="primary" @click="openCreate">新增题目</n-button>
     </header>
@@ -206,6 +223,12 @@ onMounted(() => {
         :options="tagOptions"
         filterable
         style="width: 220px"
+        @update:value="resetAndFetch"
+      />
+      <n-select
+        v-model:value="query.sort"
+        :options="SORT_OPTIONS"
+        style="width: 150px"
         @update:value="resetAndFetch"
       />
     </div>
@@ -243,6 +266,7 @@ onMounted(() => {
             </div>
           </div>
 
+          <RatingBadge :rating="p.rating" />
           <DifficultyTag :difficulty="p.difficulty" />
 
           <div class="row__actions">

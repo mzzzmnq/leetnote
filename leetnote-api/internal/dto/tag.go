@@ -17,6 +17,7 @@ type TagResponse struct {
 	Name      string    `json:"name"`
 	Slug      string    `json:"slug"`
 	Kind      string    `json:"kind"`
+	SortOrder int       `json:"sort_order"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
@@ -29,6 +30,7 @@ func NewTagResponse(t *model.Tag) TagResponse {
 		Name:      t.Name,
 		Slug:      t.Slug,
 		Kind:      t.Kind,
+		SortOrder: t.SortOrder,
 		CreatedAt: t.CreatedAt,
 	}
 }

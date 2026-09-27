@@ -48,6 +48,37 @@ func TestParseTidan(t *testing.T) {
 }
 
 // 题单最关键的结构特征：第一列只在专题首行出现，后续行要向下继承。
+// Order 是题单里的原始行号，从 1 开始。
+//
+// 它决定题目库「按题单顺序」排序的结果，所以必须严格递增、不能有 0 或重复。
+func TestParseTidanAssignsSequentialOrder(t *testing.T) {
+	entries, err := ParseTidan(strings.NewReader(sampleTidan))
+	if err != nil {
+		t.Fatalf("解析失败: %v", err)
+	}
+
+	for i, e := range entries {
+		if want := i + 1; e.Order != want {
+			t.Errorf("第 %d 道的 Order 应为 %d, 实际 %d (slug=%s)", i, want, e.Order, e.Slug)
+		}
+	}
+}
+
+// URL 由 slug 拼出，指向国内站（题单的链接就是 leetcode.cn）
+func TestParseTidanBuildsURL(t *testing.T) {
+	entries, err := ParseTidan(strings.NewReader(sampleTidan))
+	if err != nil {
+		t.Fatalf("解析失败: %v", err)
+	}
+
+	for _, e := range entries {
+		want := "https://leetcode.cn/problems/" + e.Slug + "/"
+		if e.URL != want {
+			t.Errorf("%s 的 URL 应为 %q, 实际 %q", e.Slug, want, e.URL)
+		}
+	}
+}
+
 func TestParseTidanCarriesTopicForward(t *testing.T) {
 	entries, err := ParseTidan(strings.NewReader(sampleTidan))
 	if err != nil {

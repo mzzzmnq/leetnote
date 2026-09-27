@@ -19,6 +19,12 @@ import (
 
 // TidanEntry 是题单里的一道题。
 type TidanEntry struct {
+	// Order 是该题在题单里的原始序号（从 1 开始）。
+	//
+	// 题单是从易到难排的，这个顺序本身携带信息 ——
+	// 按题号排序会把它彻底打乱，变成看不出规律的难度起伏。
+	Order int
+
 	LeetCodeID int
 	Title      string
 	Slug       string
@@ -28,6 +34,16 @@ type TidanEntry struct {
 
 	// Difficulty 不在题单里，由 import 流程从 LeetCode 接口补齐
 	Difficulty string
+	// DifficultyKnown 表示 Difficulty 是【真实拿到】的，而不是用
+	// -fallback-difficulty 填的占位值。
+	//
+	// 有了它才能在写库时区分「这道题确实是 Medium」和「这次没拉到，先按 Medium 记」——
+	// 后者绝不能覆盖库里已有的正确难度。
+	DifficultyKnown bool
+	// Rating 同理，来自社区统计的难度分
+	Rating *float64
+	// URL 由 slug 拼出来
+	URL string
 }
 
 var (
@@ -113,12 +129,16 @@ func ParseTidan(r io.Reader) ([]TidanEntry, error) {
 		seen[slug] = struct{}{}
 
 		entries = append(entries, TidanEntry{
+			Order:      len(entries) + 1, // 题单里的原始顺序，从 1 开始
 			LeetCodeID: id,
 			Title:      strings.TrimSpace(m[2]),
 			Slug:       slug,
 			Topic:      currentTopic,
 			Note:       noteCell,
 			Homework:   strings.HasPrefix(noteCell, "*"),
+			// 题单只给了 slug，跳转链接由它拼出来。
+			// 用国内站：题单的链接就指向 leetcode.cn。
+			URL: "https://leetcode.cn/problems/" + slug + "/",
 		})
 	}
 
