@@ -3,7 +3,43 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="LeetNote —— LeetCode 刷题笔记：Markdown 笔记、多解法对比、灵神题单检索、AI 解法讲解与 SM-2 间隔重复复习。"
+    />
     <title>LeetNote · 算法练习笔记</title>
+
+    <script>
+      // 首屏主题。
+      //
+      // 【必须在样式和 Vue 之前同步执行】否则会先渲染一帧白底、再切成暗色，
+      // 也就是常说的"闪白"（FOUC）。放到 Vue 里做已经太晚了。
+      // 逻辑与 src/stores/theme.ts 保持一致，改一处要同步改另一处。
+      ;(function () {
+        try {
+          var saved = localStorage.getItem('leetnote:theme')
+          var dark =
+            saved === 'dark' ||
+            ((!saved || saved === 'auto') &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches)
+          var root = document.documentElement
+          root.classList.toggle('dark', dark)
+          root.style.colorScheme = dark ? 'dark' : 'light'
+        } catch (e) {
+          /* 隐私模式下 localStorage 会抛异常，用默认亮色即可 */
+        }
+      })()
+    </script>
+
+    <style>
+      /* 兜底底色：主样式表加载完成前也不闪白 */
+      html {
+        background: #f6f7f9;
+      }
+      html.dark {
+        background: #0e1116;
+      }
+    </style>
   </head>
   <body>
     <div id="app"></div>

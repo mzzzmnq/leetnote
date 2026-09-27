@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { RouterLink, RouterView, useRouter } from 'vue-router'
 import { NAvatar, NDropdown, useDialog, useMessage } from 'naive-ui'
+import ThemeToggle from '@/components/ThemeToggle.vue'
 import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
@@ -68,14 +69,18 @@ function handleUserSelect(key: string): void {
           </RouterLink>
         </nav>
 
-        <n-dropdown :options="userOptions" trigger="click" @select="handleUserSelect">
-          <button class="app-user" type="button">
-            <n-avatar round :size="28" :src="userStore.user?.avatar_url ?? undefined">
-              {{ initial }}
-            </n-avatar>
-            <span class="app-user__name">{{ userStore.user?.username }}</span>
-          </button>
-        </n-dropdown>
+        <div class="app-actions">
+          <ThemeToggle />
+
+          <n-dropdown :options="userOptions" trigger="click" @select="handleUserSelect">
+            <button class="app-user" type="button">
+              <n-avatar round :size="28" :src="userStore.user?.avatar_url ?? undefined">
+                {{ initial }}
+              </n-avatar>
+              <span class="app-user__name">{{ userStore.user?.username }}</span>
+            </button>
+          </n-dropdown>
+        </div>
       </div>
     </header>
 
@@ -96,13 +101,16 @@ function handleUserSelect(key: string): void {
   position: sticky;
   top: 0;
   z-index: 10;
-  background: #fff;
+  background: var(--ln-header-bg);
   border-bottom: 1px solid var(--ln-border);
+  /* 滚动时内容从顶栏底下透出来，比纯色顶栏更有层次 */
+  backdrop-filter: saturate(160%) blur(10px);
+  -webkit-backdrop-filter: saturate(160%) blur(10px);
 }
 
 .app-header__inner {
   display: flex;
-  gap: 32px;
+  gap: 28px;
   align-items: center;
   max-width: 1080px;
   height: 56px;
@@ -111,7 +119,7 @@ function handleUserSelect(key: string): void {
 }
 
 .app-brand {
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 700;
   color: var(--ln-text);
   letter-spacing: -0.02em;
@@ -122,32 +130,49 @@ function handleUserSelect(key: string): void {
 }
 
 .app-brand__accent {
-  color: var(--ln-primary);
+  color: var(--ln-primary-text);
 }
 
 .app-nav {
   display: flex;
   flex: 1;
-  gap: 4px;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  /* 导航项少，不会真的溢出；这里只是防止极窄屏把布局撑破 */
+  scrollbar-width: none;
+}
+
+.app-nav::-webkit-scrollbar {
+  display: none;
 }
 
 .app-nav__link {
+  flex-shrink: 0;
   padding: 6px 12px;
   font-size: 14px;
   color: var(--ln-text-muted);
-  border-radius: 6px;
+  white-space: nowrap;
+  border-radius: var(--ln-radius-sm);
 }
 
 .app-nav__link:hover {
   color: var(--ln-text);
-  background: var(--ln-bg);
+  background: var(--ln-surface-active);
   text-decoration: none;
 }
 
 .app-nav__link--active {
   font-weight: 600;
-  color: var(--ln-primary);
-  background: rgb(47 111 237 / 8%);
+  color: var(--ln-primary-text);
+  background: var(--ln-primary-soft);
+}
+
+.app-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 .app-user {
@@ -164,11 +189,23 @@ function handleUserSelect(key: string): void {
 }
 
 .app-user:hover {
-  background: var(--ln-bg);
+  background: var(--ln-surface-active);
 }
 
 .app-user__name {
   font-size: 14px;
+}
+
+/* 窄屏下收起用户名，只留头像 —— 顶栏不至于挤成一团 */
+@media (max-width: 720px) {
+  .app-header__inner {
+    gap: 14px;
+    padding: 0 16px;
+  }
+
+  .app-user__name {
+    display: none;
+  }
 }
 
 .app-main {

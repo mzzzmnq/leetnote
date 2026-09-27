@@ -10,10 +10,15 @@ import type { Note, ReviewCard, ReviewStats } from '@/api/types'
 import BaseChart from '@/components/BaseChart.vue'
 import DifficultyTag from '@/components/DifficultyTag.vue'
 import MarkdownViewer from '@/components/MarkdownViewer.vue'
+import { useThemeStore } from '@/stores/theme'
+import { chartColors } from '@/utils/chartTheme'
 import { renderCodeBlock } from '@/utils/markdown'
 
 const router = useRouter()
 const message = useMessage()
+const themeStore = useThemeStore()
+
+const palette = computed(() => chartColors(themeStore.isDark))
 
 const loading = ref(true)
 const stats = ref<ReviewStats | null>(null)
@@ -62,7 +67,7 @@ const forecastOption = computed<EChartsCoreOption>(() => {
         name: '到期卡片',
         data: points.map((p) => p.count),
         barMaxWidth: 28,
-        itemStyle: { color: '#2f6fed', borderRadius: [4, 4, 0, 0] },
+        itemStyle: { color: palette.value.primary, borderRadius: [4, 4, 0, 0] },
       },
     ],
   }
@@ -332,9 +337,9 @@ onMounted(load)
 
 .card {
   padding: 18px 20px;
-  background: #fff;
+  background: var(--ln-surface);
   border: 1px solid var(--ln-border);
-  border-radius: 10px;
+  border-radius: var(--ln-radius);
 }
 
 .card__label {
@@ -356,9 +361,9 @@ onMounted(load)
 
 .panel {
   padding: 18px 20px;
-  background: #fff;
+  background: var(--ln-surface);
   border: 1px solid var(--ln-border);
-  border-radius: 10px;
+  border-radius: var(--ln-radius);
 }
 
 .panel--empty {
@@ -396,9 +401,9 @@ onMounted(load)
 
 .flashcard {
   padding: 28px 32px;
-  background: #fff;
+  background: var(--ln-surface);
   border: 1px solid var(--ln-border);
-  border-radius: 12px;
+  border-radius: var(--ln-radius-lg);
 }
 
 .flashcard__head {
@@ -508,9 +513,9 @@ onMounted(load)
 .finish {
   padding: 60px 20px;
   text-align: center;
-  background: #fff;
+  background: var(--ln-surface);
   border: 1px solid var(--ln-border);
-  border-radius: 12px;
+  border-radius: var(--ln-radius-lg);
 }
 
 .finish__title {

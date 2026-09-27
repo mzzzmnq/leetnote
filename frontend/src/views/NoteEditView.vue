@@ -242,6 +242,7 @@ onMounted(load)
         <n-input
           v-model:value="form.title"
           placeholder="笔记标题"
+          :input-props="{ 'aria-label': '笔记标题' }"
           maxlength="200"
           show-count
           size="large"
@@ -256,12 +257,14 @@ onMounted(load)
             remote
             clearable
             placeholder="关联题目（可搜索，可留空）"
+            :input-props="{ 'aria-label': '关联题目' }"
             style="flex: 1"
             @search="searchProblems"
           />
           <n-select
             v-model:value="form.status"
             :options="statusOptions"
+            :input-props="{ 'aria-label': '发布状态' }"
             style="width: 120px"
           />
         </div>
@@ -274,6 +277,7 @@ onMounted(load)
             filterable
             clearable
             placeholder="选择标签"
+            :input-props="{ 'aria-label': '标签' }"
             style="flex: 1"
           />
         </div>
@@ -281,6 +285,7 @@ onMounted(load)
         <n-input
           v-model:value="form.summary"
           placeholder="一句话摘要（可选，显示在列表页）"
+          :input-props="{ 'aria-label': '一句话摘要' }"
           maxlength="500"
           clearable
         />
@@ -299,6 +304,7 @@ onMounted(load)
             v-model:value="form.content_md"
             type="textarea"
             placeholder="支持 Markdown。用 ```go 包裹代码块会高亮。"
+            :input-props="{ 'aria-label': '正文 Markdown' }"
             class="editor__input"
             :autosize="{ minRows: 20, maxRows: 40 }"
           />
@@ -358,9 +364,9 @@ onMounted(load)
 .editor {
   padding: 16px;
   margin-bottom: 16px;
-  background: #fff;
+  background: var(--ln-surface);
   border: 1px solid var(--ln-border);
-  border-radius: 10px;
+  border-radius: var(--ln-radius);
 }
 
 .editor__head {
@@ -402,9 +408,9 @@ onMounted(load)
 
 .solutions-edit {
   padding: 16px;
-  background: #fff;
+  background: var(--ln-surface);
   border: 1px solid var(--ln-border);
-  border-radius: 10px;
+  border-radius: var(--ln-radius);
 }
 
 .solutions-edit__head {

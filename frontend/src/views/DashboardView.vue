@@ -9,9 +9,15 @@ import { fetchOverview, fetchTrend } from '@/api/stats'
 import type { NoteListItem, StatsOverview, TrendPoint } from '@/api/types'
 import BaseChart from '@/components/BaseChart.vue'
 import NoteCard from '@/components/NoteCard.vue'
+import { useThemeStore } from '@/stores/theme'
+import { chartColors } from '@/utils/chartTheme'
 
 const router = useRouter()
 const message = useMessage()
+const themeStore = useThemeStore()
+
+// 图表里的语义色随主题变化：暗色下要提亮，否则糊在背景里看不清
+const palette = computed(() => chartColors(themeStore.isDark))
 
 const loading = ref(false)
 const overview = ref<StatsOverview | null>(null)
@@ -48,7 +54,7 @@ const trendOption = computed<EChartsCoreOption>(() => ({
       smooth: true,
       symbolSize: 6,
       data: trend.value.map((p) => p.count),
-      itemStyle: { color: '#2f6fed' },
+      itemStyle: { color: palette.value.primary },
       lineStyle: { width: 2 },
       areaStyle: { opacity: 0.12 },
     },
@@ -67,9 +73,9 @@ const difficultyOption = computed<EChartsCoreOption>(() => {
         avoidLabelOverlap: true,
         label: { show: false },
         data: [
-          { name: '简单', value: d?.easy ?? 0, itemStyle: { color: '#18a058' } },
-          { name: '中等', value: d?.medium ?? 0, itemStyle: { color: '#f0a020' } },
-          { name: '困难', value: d?.hard ?? 0, itemStyle: { color: '#d03050' } },
+          { name: '简单', value: d?.easy ?? 0, itemStyle: { color: palette.value.success } },
+          { name: '中等', value: d?.medium ?? 0, itemStyle: { color: palette.value.warning } },
+          { name: '困难', value: d?.hard ?? 0, itemStyle: { color: palette.value.danger } },
         ],
       },
     ],
@@ -194,9 +200,9 @@ onMounted(load)
 
 .card {
   padding: 18px 20px;
-  background: #fff;
+  background: var(--ln-surface);
   border: 1px solid var(--ln-border);
-  border-radius: 10px;
+  border-radius: var(--ln-radius);
 }
 
 .card__label {
@@ -232,9 +238,9 @@ onMounted(load)
 
 .panel {
   padding: 18px 20px;
-  background: #fff;
+  background: var(--ln-surface);
   border: 1px solid var(--ln-border);
-  border-radius: 10px;
+  border-radius: var(--ln-radius);
 }
 
 .panel__title {
@@ -251,9 +257,9 @@ onMounted(load)
 
 .recent {
   padding: 18px 20px;
-  background: #fff;
+  background: var(--ln-surface);
   border: 1px solid var(--ln-border);
-  border-radius: 10px;
+  border-radius: var(--ln-radius);
 }
 
 .recent__head {

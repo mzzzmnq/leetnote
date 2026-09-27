@@ -277,9 +277,9 @@ watch(
 .state-box {
   padding: 60px;
   text-align: center;
-  background: #fff;
+  background: var(--ln-surface);
   border: 1px solid var(--ln-border);
-  border-radius: 10px;
+  border-radius: var(--ln-radius);
 }
 
 .detail-head {
@@ -296,9 +296,9 @@ watch(
 
 .detail-card {
   padding: 28px 32px;
-  background: #fff;
+  background: var(--ln-surface);
   border: 1px solid var(--ln-border);
-  border-radius: 12px;
+  border-radius: var(--ln-radius-lg);
 }
 
 .detail-title {
@@ -346,15 +346,15 @@ watch(
   font-size: 12px;
   color: var(--ln-text-muted);
   background: var(--ln-bg);
-  border-radius: 10px;
+  border-radius: var(--ln-radius);
 }
 
 .solution {
   padding: 18px 20px;
   margin-bottom: 14px;
-  background: #fff;
+  background: var(--ln-surface);
   border: 1px solid var(--ln-border);
-  border-radius: 10px;
+  border-radius: var(--ln-radius);
 }
 
 .solution__head {
@@ -383,9 +383,9 @@ watch(
 .explain {
   margin-top: 24px;
   padding: 18px 20px;
-  background: #fff;
+  background: var(--ln-surface);
   border: 1px solid var(--ln-border);
-  border-radius: 10px;
+  border-radius: var(--ln-radius);
 }
 
 .explain__head {
@@ -410,7 +410,7 @@ watch(
   font-weight: 400;
   color: var(--ln-text-muted);
   background: var(--ln-bg);
-  border-radius: 10px;
+  border-radius: var(--ln-radius);
 }
 
 .explain__hint {
@@ -423,9 +423,9 @@ watch(
 .similar {
   margin-top: 24px;
   padding: 18px 20px;
-  background: #fff;
+  background: var(--ln-surface);
   border: 1px solid var(--ln-border);
-  border-radius: 10px;
+  border-radius: var(--ln-radius);
 }
 
 .similar__heading {
@@ -442,7 +442,7 @@ watch(
   font-weight: 400;
   color: var(--ln-text-muted);
   background: var(--ln-bg);
-  border-radius: 10px;
+  border-radius: var(--ln-radius);
 }
 
 .similar__list {
@@ -459,7 +459,7 @@ watch(
 }
 
 .similar__item:hover {
-  background: rgb(47 111 237 / 8%);
+  background: var(--ln-primary-soft);
   text-decoration: none;
 }
 
@@ -479,7 +479,7 @@ watch(
   flex-shrink: 0;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
-  color: var(--ln-primary);
+  color: var(--ln-primary-text);
 }
 
 .similar__summary {

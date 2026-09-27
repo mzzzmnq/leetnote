@@ -196,8 +196,7 @@ onMounted(() => {
       <div>
         <h1 class="page__title">题目库</h1>
         <p class="page__subtitle">
-          共 {{ total }} 道题。难度分由社区按竞赛表现统计，比三档难度细得多；
-          显示「—」表示该题早于 LeetCode 竞赛时代，没有难度分数据。
+          共 {{ total }} 道题。「—」表示该题早于 LeetCode 竞赛时代，没有难度分数据。
         </p>
       </div>
       <n-button type="primary" @click="openCreate">新增题目</n-button>
@@ -207,6 +206,7 @@ onMounted(() => {
       <n-input
         v-model:value="query.keyword"
         placeholder="搜索标题或 slug，回车搜索"
+        :input-props="{ 'aria-label': '搜索题目' }"
         clearable
         style="max-width: 240px"
         @keyup.enter="resetAndFetch"
@@ -215,12 +215,14 @@ onMounted(() => {
       <n-select
         v-model:value="query.difficulty"
         :options="DIFFICULTY_OPTIONS"
+        :input-props="{ 'aria-label': '按难度筛选' }"
         style="width: 130px"
         @update:value="resetAndFetch"
       />
       <n-select
         v-model:value="query.tagId"
         :options="tagOptions"
+        :input-props="{ 'aria-label': '按专题筛选' }"
         filterable
         style="width: 220px"
         @update:value="resetAndFetch"
@@ -228,6 +230,7 @@ onMounted(() => {
       <n-select
         v-model:value="query.sort"
         :options="SORT_OPTIONS"
+        :input-props="{ 'aria-label': '排序方式' }"
         style="width: 150px"
         @update:value="resetAndFetch"
       />
@@ -296,21 +299,40 @@ onMounted(() => {
           <n-input-number
             v-model:value="form.leetcode_id"
             placeholder="如 1"
+            :input-props="{ 'aria-label': '题号' }"
             :min="1"
             style="width: 100%"
           />
         </n-form-item>
         <n-form-item label="标题">
-          <n-input v-model:value="form.title" placeholder="如 Two Sum" maxlength="200" />
+          <n-input
+            v-model:value="form.title"
+            placeholder="如 Two Sum"
+            :input-props="{ 'aria-label': '标题' }"
+            maxlength="200"
+          />
         </n-form-item>
         <n-form-item label="Slug">
-          <n-input v-model:value="form.title_slug" placeholder="如 two-sum" maxlength="200" />
+          <n-input
+            v-model:value="form.title_slug"
+            placeholder="如 two-sum"
+            :input-props="{ 'aria-label': 'Slug' }"
+            maxlength="200"
+          />
         </n-form-item>
         <n-form-item label="难度">
-          <n-select v-model:value="form.difficulty" :options="DIFFICULTY_OPTIONS.slice(1)" />
+          <n-select
+            v-model:value="form.difficulty"
+            :options="DIFFICULTY_OPTIONS.slice(1)"
+            :input-props="{ 'aria-label': '难度' }"
+          />
         </n-form-item>
         <n-form-item label="链接（可选）">
-          <n-input v-model:value="form.url" placeholder="https://leetcode.cn/problems/..." />
+          <n-input
+            v-model:value="form.url"
+            placeholder="https://leetcode.cn/problems/..."
+            :input-props="{ 'aria-label': '链接' }"
+          />
         </n-form-item>
       </n-form>
 
@@ -341,22 +363,22 @@ onMounted(() => {
   gap: 10px;
   padding: 14px 16px;
   margin-bottom: 16px;
-  background: #fff;
+  background: var(--ln-surface);
   border: 1px solid var(--ln-border);
-  border-radius: 10px;
+  border-radius: var(--ln-radius);
 }
 
 .empty {
   padding: 60px 0;
-  background: #fff;
+  background: var(--ln-surface);
   border: 1px solid var(--ln-border);
-  border-radius: 10px;
+  border-radius: var(--ln-radius);
 }
 
 .rows {
-  background: #fff;
+  background: var(--ln-surface);
   border: 1px solid var(--ln-border);
-  border-radius: 10px;
+  border-radius: var(--ln-radius);
 }
 
 .row {

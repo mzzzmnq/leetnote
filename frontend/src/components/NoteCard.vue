@@ -55,11 +55,27 @@ const problemLabel = computed(() => {
     <button
       class="note-card__star"
       :class="{ 'note-card__star--on': note.is_starred }"
-      :title="note.is_starred ? '取消收藏' : '收藏'"
       type="button"
+      :title="note.is_starred ? '取消收藏' : '收藏'"
+      :aria-label="note.is_starred ? '取消收藏' : '收藏'"
+      :aria-pressed="note.is_starred"
       @click="emit('toggleStar', note.id)"
     >
-      {{ note.is_starred ? '★' : '☆' }}
+      <!-- 用 SVG 而不是 ★/☆ 字符：字符在不同平台上的字形、粗细、基线都不一样，
+           SVG 能保证各处渲染完全一致，也便于精确控制描边与填充。 -->
+      <svg
+        class="note-card__star-icon"
+        viewBox="0 0 24 24"
+        :fill="note.is_starred ? 'currentColor' : 'none'"
+        stroke="currentColor"
+        stroke-width="1.6"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <path
+          d="M12 3.4l2.63 5.33 5.87.86-4.25 4.14 1 5.87L12 16.87l-5.25 2.73 1-5.87L3.5 9.59l5.87-.86z"
+        />
+      </svg>
     </button>
   </article>
 </template>
@@ -70,14 +86,17 @@ const problemLabel = computed(() => {
   gap: 12px;
   align-items: flex-start;
   padding: 18px 20px;
-  background: #fff;
+  background: var(--ln-surface);
   border: 1px solid var(--ln-border);
-  border-radius: 10px;
-  transition: border-color 0.15s;
+  border-radius: var(--ln-radius);
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 
 .note-card:hover {
-  border-color: #cbd5e1;
+  border-color: var(--ln-border-strong);
+  box-shadow: var(--ln-shadow-sm);
 }
 
 .note-card__main {
@@ -99,7 +118,7 @@ const problemLabel = computed(() => {
 }
 
 .note-card__title:hover {
-  color: var(--ln-primary);
+  color: var(--ln-primary-text);
   text-decoration: none;
 }
 
@@ -135,20 +154,32 @@ const problemLabel = computed(() => {
 }
 
 .note-card__star {
-  padding: 0 4px;
-  font-size: 20px;
-  line-height: 1;
-  color: #cbd5e1;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: var(--ln-text-subtle);
   cursor: pointer;
   background: none;
   border: 0;
+  border-radius: 6px;
+  transition:
+    color 0.15s,
+    background-color 0.15s;
 }
 
 .note-card__star:hover {
-  color: #f59e0b;
+  color: var(--ln-star);
+  background: var(--ln-surface-active);
 }
 
 .note-card__star--on {
-  color: #f59e0b;
+  color: var(--ln-star);
+}
+
+.note-card__star-icon {
+  width: 18px;
+  height: 18px;
 }
 </style>

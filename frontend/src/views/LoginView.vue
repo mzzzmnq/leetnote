@@ -72,6 +72,7 @@ async function handleGitHubLogin(): Promise<void> {
           <n-input
             v-model:value="form.login"
             placeholder="用户名或邮箱"
+            :input-props="{ 'aria-label': '用户名或邮箱' }"
             :disabled="submitting"
             autocomplete="username"
             @keyup.enter="handleSubmit"
@@ -84,6 +85,7 @@ async function handleGitHubLogin(): Promise<void> {
             type="password"
             show-password-on="click"
             placeholder="密码"
+            :input-props="{ 'aria-label': '密码' }"
             :disabled="submitting"
             autocomplete="current-password"
             @keyup.enter="handleSubmit"

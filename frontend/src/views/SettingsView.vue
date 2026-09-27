@@ -103,10 +103,18 @@ onMounted(() => {
 
       <n-form label-placement="top" :show-feedback="false">
         <n-form-item label="用户名">
-          <n-input :value="userStore.user?.username" disabled />
+          <n-input
+            :value="userStore.user?.username"
+            disabled
+            :input-props="{ 'aria-label': '用户名' }"
+          />
         </n-form-item>
         <n-form-item label="邮箱">
-          <n-input :value="userStore.user?.email" disabled />
+          <n-input
+            :value="userStore.user?.email"
+            disabled
+            :input-props="{ 'aria-label': '邮箱' }"
+          />
         </n-form-item>
         <n-form-item label="简介">
           <n-input
@@ -116,6 +124,7 @@ onMounted(() => {
             maxlength="200"
             show-count
             placeholder="一句话介绍自己"
+            :input-props="{ 'aria-label': '简介' }"
           />
         </n-form-item>
         <n-button type="primary" :loading="savingProfile" @click="handleSaveProfile">
@@ -137,6 +146,7 @@ onMounted(() => {
             type="password"
             show-password-on="click"
             placeholder="没有密码可留空"
+            :input-props="{ 'aria-label': '当前密码' }"
           />
         </n-form-item>
         <n-form-item label="新密码">
@@ -145,6 +155,7 @@ onMounted(() => {
             type="password"
             show-password-on="click"
             placeholder="至少 8 位"
+            :input-props="{ 'aria-label': '新密码' }"
           />
         </n-form-item>
         <n-button :loading="savingPassword" @click="handleChangePassword">更新密码</n-button>
@@ -176,9 +187,9 @@ onMounted(() => {
   max-width: 520px;
   padding: 24px;
   margin-bottom: 20px;
-  background: #fff;
+  background: var(--ln-surface);
   border: 1px solid var(--ln-border);
-  border-radius: 12px;
+  border-radius: var(--ln-radius-lg);
 }
 
 .settings-block__title {

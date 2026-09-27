@@ -98,6 +98,7 @@ onBeforeUnmount(() => {
       v-model:value="keyword"
       size="large"
       clearable
+      :input-props="{ 'aria-label': '搜索关键词' }"
       placeholder="输入关键词，如「哈希表」「滑动窗口」「two sum」"
       class="search-box"
     />
@@ -193,7 +194,7 @@ onBeforeUnmount(() => {
   font-weight: 400;
   color: var(--ln-text-muted);
   background: var(--ln-bg);
-  border-radius: 10px;
+  border-radius: var(--ln-radius);
 }
 
 .group__list {
@@ -207,9 +208,9 @@ onBeforeUnmount(() => {
   gap: 10px;
   align-items: center;
   padding: 12px 18px;
-  background: #fff;
+  background: var(--ln-surface);
   border: 1px solid var(--ln-border);
-  border-radius: 10px;
+  border-radius: var(--ln-radius);
 }
 
 .problem-row__no {

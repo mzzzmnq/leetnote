@@ -13,6 +13,7 @@
 4. [功能清单与里程碑](#4-功能清单与里程碑)
 5. [数据库设计](#5-数据库设计)
 6. [API 设计](#6-api-设计)
+6.5 [前端主题系统与无障碍](#65-前端主题系统与无障碍)
 7. [项目目录结构](#7-项目目录结构)
 8. [认证方案](#8-认证方案)
 9. [部署方案（零服务器起步）](#9-部署方案零服务器起步)
@@ -925,6 +926,95 @@ message GenerateReviewCardResponse {
 
 ---
 
+## 6.5 前端主题系统与无障碍
+
+### 为什么用 CSS 变量而不是 Sass 变量
+
+Sass 变量在编译期就被替换成字面量，运行时改不了；主题切换必须发生在运行时，
+所以只能用 **CSS 自定义属性**（`--ln-*`）。
+
+所有颜色集中定义在 `styles/main.css`：
+
+```css
+:root      { --ln-bg: #f6f7f9; --ln-text: #1a1f2b; --ln-primary: #2f6fed; ... }
+html.dark  { --ln-bg: #0e1116; --ln-text: #e6edf3; --ln-primary: #6b9bff; ... }
+```
+
+换肤就是切一个类名：
+
+```ts
+document.documentElement.classList.toggle('dark', isDark)
+```
+
+组件里**零硬编码颜色**，所以新增页面自动同时支持亮暗两套，不需要额外适配。
+
+### 不闪白（FOUC）
+
+主题如果等 Vue 挂载后再应用，页面会先渲染一帧白底再变暗。所以把它放在
+`index.html` 的**内联脚本**里，位置在样式表和模块脚本之前：
+
+```html
+<script>
+  ;(function () {
+    var saved = localStorage.getItem('leetnote:theme')
+    var dark = saved === 'dark' ||
+      ((!saved || saved === 'auto') && window.matchMedia('(prefers-color-scheme: dark)').matches)
+    document.documentElement.classList.toggle('dark', dark)
+  })()
+</script>
+```
+
+这是**唯一**必须在框架之外写的一小段逻辑，因为它要跑得比框架早。
+
+### 四处必须同步换肤
+
+只改自己写的 CSS 是不够的，还有三个"别人家的"颜色系统：
+
+| 系统 | 适配方式 |
+|---|---|
+| 自己的界面 | CSS 变量 |
+| **Naive UI 组件** | `NConfigProvider` 的 `theme` + `themeOverrides` |
+| **ECharts 图表** | `registerTheme` 注册两套主题；切主题时**销毁重建**实例（ECharts 只在 `init` 时读主题） |
+| **代码高亮** | 手写 hljs 配色（官方主题是全局规则，没法按主题切换） |
+
+任何一处漏掉，都会出现"页面变暗了但弹窗还是白的"这种割裂感。
+
+### 无障碍：不是"锦上添花"
+
+按 WCAG AA 逐元素实测对比度后，发现并修掉了这些问题：
+
+| 位置 | 修前 | 修后 |
+|---|---|---|
+| 导航选中项 | 4.05:1 | 5.86:1（拆出 `--ln-primary-text`） |
+| Naive 输入框占位符 | 1.78:1 | 4.83:1 |
+| Naive 标签文字（warning） | 1.93:1 | 4.85:1 |
+| Naive 空状态提示 | 1.78:1 | 6.0:1 |
+| 头像白字压浅灰底 | 1.61:1 | 4.55:1 |
+| 分页当前页 | 4.24:1 | 5.86:1 |
+| 收藏星标 | 1.51:1 | 4.83:1 |
+
+结论是 **Lighthouse 无障碍 1.0**（9 个页面 × 亮暗两套主题，零失败项）。
+
+两个 Naive UI 的坑值得单独记：
+
+- **`n-form-item` 的 `label` 没有 `for` 属性**，渲染出的 `<label>` 和输入框之间
+  没有程序化关联，屏幕阅读器读不出名称 —— 必须自己补 `aria-label`。
+- **`n-input` 会把未知属性透传到外层 `<div>`**，而不是内层 `<input>`。
+  直接写 `aria-label` 不生效，要用 `:input-props="{ 'aria-label': '...' }"`。
+
+### 主色为什么要拆成两个 token
+
+```css
+--ln-primary: #2f6fed;       /* 按钮底色、图表线条 */
+--ln-primary-text: #1f56c4;  /* 链接、导航选中文字 */
+```
+
+同一个蓝色，当**文字**放在 9% 主色浅底上只有 4.05:1，不达标；加深后是 5.86:1。
+而**按钮底色**不需要满足文字对比度，保持鲜亮更好看。两者的约束不一样，
+所以不能共用一个值。
+
+---
+
 ## 7. 项目目录结构
 
 ```
@@ -1000,40 +1090,51 @@ leetnote/
 │   └── Dockerfile
 │
 ├── frontend/                         # Vue 3 前端
+│   ├── index.html                    # ★ 含防闪白的内联主题脚本
+│   ├── public/robots.txt
 │   ├── src/
-│   │   ├── main.ts
-│   │   ├── App.vue
+│   │   ├── main.ts                   # 入口：Pinia → Router → 主题初始化
+│   │   ├── App.vue                   # ★ 注入 Naive 的亮/暗主题
 │   │   ├── api/
-│   │   │   ├── client.ts             # axios 实例 + 拦截器
-│   │   │   ├── auth.ts
-│   │   │   ├── notes.ts
-│   │   │   └── ai.ts
-│   │   ├── router/index.ts
+│   │   │   ├── client.ts             # axios 实例 + 401 单飞自动刷新
+│   │   │   ├── token.ts              # access token 只存内存
+│   │   │   ├── types.ts              # 与后端契约对应的 TS 类型
+│   │   │   └── auth/notes/problems/tags/reviews/stats/search/users.ts
+│   │   ├── router/index.ts           # 路由与登录守卫
 │   │   ├── stores/
 │   │   │   ├── user.ts
-│   │   │   └── notes.ts
+│   │   │   └── theme.ts              # ★ 主题状态（浅色/深色/跟随系统）
+│   │   ├── layouts/
+│   │   │   └── DefaultLayout.vue     # 顶栏 + 导航 + 主题切换
 │   │   ├── views/
-│   │   │   ├── LoginView.vue
+│   │   │   ├── DashboardView.vue     # 概览（统计卡 + 图表）
 │   │   │   ├── NoteListView.vue
 │   │   │   ├── NoteDetailView.vue
-│   │   │   ├── NoteEditView.vue
-│   │   │   ├── ProblemListView.vue
-│   │   │   ├── StatsView.vue
-│   │   │   └── ReviewView.vue
+│   │   │   ├── NoteEditView.vue      # 分屏 Markdown 编辑器
+│   │   │   ├── ProblemListView.vue   # 题目库（难度分 + 6 种排序）
+│   │   │   ├── ReviewView.vue        # 闪卡式复习
+│   │   │   ├── SearchView.vue
+│   │   │   ├── SettingsView.vue
+│   │   │   ├── LoginView.vue / RegisterView.vue / OAuthCallbackView.vue
+│   │   │   └── NotFoundView.vue
 │   │   ├── components/
+│   │   │   ├── BaseChart.vue         # ECharts 封装（随主题重建）
+│   │   │   ├── MarkdownViewer.vue    # Markdown + 代码高亮
+│   │   │   ├── SolutionEditor.vue    # 多解法增删改
 │   │   │   ├── NoteCard.vue
-│   │   │   ├── MarkdownViewer.vue
-│   │   │   ├── MarkdownEditor.vue
-│   │   │   ├── CodeBlock.vue
-│   │   │   ├── TagSelector.vue
-│   │   │   ├── AiExplainPanel.vue
-│   │   │   └── Pagination.vue
-│   │   ├── composables/
-│   │   ├── types/models.ts           # 与后端契约对应的 TS 类型
+│   │   │   ├── DifficultyTag.vue
+│   │   │   ├── RatingBadge.vue       # 难度分徽标
+│   │   │   └── ThemeToggle.vue       # ★ 主题切换控件
+│   │   ├── styles/
+│   │   │   ├── main.css              # ★ 设计令牌（亮/暗两套）+ 全局样式
+│   │   │   └── naive-theme.ts        # ★ Naive UI 主题覆盖
 │   │   └── utils/
+│   │       ├── chartTheme.ts         # ★ ECharts 亮/暗主题
+│   │       ├── markdown.ts           # markdown-it + highlight.js 按需注册
+│   │       ├── format.ts
+│   │       └── query.ts
 │   ├── vite.config.ts
-│   ├── tsconfig.json
-│   └── Dockerfile
+│   └── tsconfig.json
 │
 ├── proto/
 │   └── leetnote.proto                # ★ 双服务共享的 gRPC 契约

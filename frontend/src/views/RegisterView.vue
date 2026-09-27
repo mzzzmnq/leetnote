@@ -61,6 +61,7 @@ async function handleSubmit(): Promise<void> {
           <n-input
             v-model:value="form.username"
             placeholder="用户名（3-50 位字母、数字、下划线）"
+            :input-props="{ 'aria-label': '用户名' }"
             :disabled="submitting"
             autocomplete="username"
           />
@@ -70,6 +71,7 @@ async function handleSubmit(): Promise<void> {
           <n-input
             v-model:value="form.email"
             placeholder="邮箱"
+            :input-props="{ 'aria-label': '邮箱' }"
             :disabled="submitting"
             autocomplete="email"
           />
@@ -81,6 +83,7 @@ async function handleSubmit(): Promise<void> {
             type="password"
             show-password-on="click"
             placeholder="密码（至少 8 位）"
+            :input-props="{ 'aria-label': '密码' }"
             :disabled="submitting"
             autocomplete="new-password"
             @keyup.enter="handleSubmit"

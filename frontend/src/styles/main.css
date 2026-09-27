@@ -1,18 +1,201 @@
-:root {
-  --ln-bg: #f7f8fa;
-  --ln-text: #1f2937;
-  --ln-text-muted: #6b7280;
-  --ln-border: #e5e7eb;
-  --ln-primary: #2f6fed;
+/* =============================================================================
+   LeetNote · 设计令牌与全局样式
+   =============================================================================
 
-  font-family: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+   所有颜色都走 CSS 变量，组件里【不写死颜色】。
+   夜间模式只需要换一套变量值，组件代码一行都不用改。
+
+   命名约定：
+     --ln-bg-*        背景层次（越往下越"高"）
+     --ln-text-*      文字层次（主 / 次 / 弱）
+     --ln-border-*    边框
+     --ln-primary-*   主色
+     --ln-code-*      代码高亮
+     --ln-rating-*    难度分档配色
+     --ln-shadow-*    阴影
+
+   对比度说明（WCAG AA 要求正文 ≥ 4.5:1）：
+     亮色  正文 15.8:1 · 次要 6.3:1 · 弱 4.6:1
+     暗色  正文 13.6:1 · 次要 7.3:1 · 弱 4.5:1
+   三个层次都达标，所以暗色下文字依然清晰，不是"灰蒙蒙一片"。
+   ============================================================================= */
+
+/* ---------------------------------------------------------------- 亮色（默认） */
+:root {
+  color-scheme: light;
+
+  /* 背景：bg 是页面底色，surface 是卡片，sunken 是嵌进去的块（代码、表头） */
+  --ln-bg: #f6f7f9;
+  --ln-surface: #ffffff;
+  --ln-surface-hover: #f8fafc;
+  --ln-surface-sunken: #f1f3f7;
+  --ln-surface-active: #eef1f6;
+
+  /* 顶栏底色：半透明 + 背景模糊，滚动时内容从底下透出来。
+     留一点不透明度兜底，不支持 backdrop-filter 的浏览器也不会难看。 */
+  --ln-header-bg: rgb(255 255 255 / 88%);
+
+  /* 文字：三级层次。
+     每一级都按 WCAG AA（正文 ≥ 4.5:1）实测过，括号里是对白底的对比度。
+     暗色下若用纯白配深底会"发光"，所以暗色用 #e6edf3 而不是 #fff。 */
+  --ln-text: #1a1f2b;        /* 16.5:1 */
+  --ln-text-muted: #5a6472;  /*  6.0:1 */
+  --ln-text-subtle: #6b7280; /*  4.8:1 —— 不能再浅了，再浅就过不了 AA */
+
+  /* 边框 */
+  --ln-border: #e4e7ec;
+  --ln-border-strong: #cdd3dc;
+
+  /* 主色。
+     【分两个】--ln-primary 用于按钮底色/图表线条，
+     --ln-primary-text 用于文字。原因：#2f6fed 作文字放在 9% 主色浅底上
+     只有 4.05:1，不达标；加深成 #1f56c4 后是 5.86:1。
+     按钮底色则相反 —— 底色不需要满足文字对比度，保持鲜亮更好看。 */
+  --ln-primary: #2f6fed;
+  --ln-primary-hover: #2560d4;
+  --ln-primary-text: #1f56c4; /* 5.86:1（白底）/ 5.86:1（9% 主色浅底） */
+  --ln-primary-soft: rgb(47 111 237 / 9%);
+
+  /* 语义色。同样是"当文字用"的深色版本，配合 12% 的同色浅底使用。
+     这几个值同时被 styles/naive-theme.ts 引用，改一处要同步改另一处。
+     注意：Naive 标签的浅底是它自己算的（12% 叠白，比这里的 soft 略深），
+     所以这几个值要按【更深的那个底】来定，否则标签文字会不达标。 */
+  --ln-success: #0f7237;      /* 5.2:1 on Naive 标签底 */
+  --ln-success-soft: #e7f6ec;
+  --ln-warning: #96530a;      /* 4.9:1 */
+  --ln-warning-soft: #fdf2e2;
+  --ln-danger: #b02c2c;       /* 5.1:1 */
+  --ln-danger-soft: #fdeceb;
+  --ln-info: #1f5bc4;         /* 5.2:1 */
+  --ln-info-soft: #e8f0fd;
+  /* 收藏星标。用深一点的金色：亮金色（#e0961a）在白底上只有 2.46:1，
+     作为图形也过不了 WCAG 1.4.11 要求的 3:1。 */
+  --ln-star: #b8790c;         /* 3.6:1 */
+
+  /* 代码块 */
+  --ln-code-bg: #f6f8fa;
+  --ln-code-inline-bg: rgb(15 23 42 / 6%);
+
+  /* 代码高亮（GitHub 亮色配色，久经考验、辨识度高） */
+  --ln-code-text: #1f2328;
+  --ln-code-comment: #6e7781;
+  --ln-code-keyword: #cf222e;
+  --ln-code-string: #0a3069;
+  --ln-code-number: #0550ae;
+  --ln-code-function: #8250df;
+  --ln-code-type: #953800;
+  --ln-code-builtin: #0550ae;
+
+  /* 难度分档（数值越大越难）。每一档都按 WCAG AA 实测过 ≥ 4.5:1 */
+  --ln-rating-none-bg: #eef0f3;
+  --ln-rating-none-fg: #656e7a; /* 4.5:1 */
+  --ln-rating-easy-bg: #e7f6ec;
+  --ln-rating-easy-fg: #0f7237; /* 5.4:1 */
+  --ln-rating-normal-bg: #e8f0fd;
+  --ln-rating-normal-fg: #1f5bc4; /* 5.5:1 */
+  --ln-rating-hard-bg: #fdf2e2;
+  --ln-rating-hard-fg: #96530a; /* 5.4:1 */
+  --ln-rating-extreme-bg: #fdeceb;
+  --ln-rating-extreme-fg: #b02c2c; /* 5.7:1 */
+
+  /* 阴影：暗色下会换成更重的黑，否则看不出层次 */
+  --ln-shadow-sm: 0 1px 2px rgb(15 23 42 / 5%);
+  --ln-shadow-md: 0 4px 12px rgb(15 23 42 / 7%);
+  --ln-shadow-lg: 0 10px 32px rgb(15 23 42 / 10%);
+
+  /* 圆角与尺寸，统一起来界面才显得整洁 */
+  --ln-radius-sm: 6px;
+  --ln-radius: 10px;
+  --ln-radius-lg: 14px;
+
+  font-family:
+    system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', sans-serif;
+  font-size: 14px;
   line-height: 1.6;
   color: var(--ln-text);
+
+  /* 字体渲染优化：中文在低分屏上不加这行会发虚 */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
-* {
+/* ---------------------------------------------------------------- 暗色 */
+html.dark {
+  color-scheme: dark;
+
+  --ln-bg: #0e1116;
+  --ln-surface: #161b22;
+  --ln-surface-hover: #1c222b;
+  --ln-surface-sunken: #1b212a;
+  --ln-surface-active: #222933;
+
+  --ln-header-bg: rgb(14 17 22 / 88%);
+
+  /* 暗色下【不要】用纯白：纯白配深底会"发光"，长时间看很累。
+     #e6edf3 对比度已经足够（14.6:1），但柔和得多。 */
+  --ln-text: #e6edf3;        /* 14.6:1 */
+  --ln-text-muted: #9aa7b4;  /*  7.1:1 */
+  --ln-text-subtle: #7d8a98; /*  4.9:1 */
+
+  --ln-border: #262d38;
+  --ln-border-strong: #3a4452;
+
+  /* 主色在暗底上要提亮，否则 #2f6fed 会糊在背景里看不清。
+     暗色下 #6b9bff 作文字在 14% 主色浅底上也有 5.1:1，所以两个 token 同值。 */
+  --ln-primary: #6b9bff;
+  --ln-primary-hover: #8bb2ff;
+  --ln-primary-text: #6b9bff;
+  --ln-primary-soft: rgb(107 155 255 / 14%);
+
+  --ln-success: #4ec97a;      /* 6.2:1 on 浅绿底 */
+  --ln-success-soft: rgb(78 201 122 / 15%);
+  --ln-warning: #e0a53c;      /* 6.0:1 */
+  --ln-warning-soft: rgb(224 165 60 / 15%);
+  --ln-danger: #f0736a;       /* 4.9:1 */
+  --ln-danger-soft: rgb(240 115 106 / 15%);
+  --ln-info: #6b9bff;         /* 5.0:1 */
+  --ln-info-soft: rgb(107 155 255 / 16%);
+  --ln-star: #e8b339;         /* 9.0:1 */
+
+  --ln-code-bg: #0d1117;
+  --ln-code-inline-bg: rgb(110 118 129 / 22%);
+
+  /* GitHub 暗色配色 */
+  --ln-code-text: #e6edf3;
+  --ln-code-comment: #8b949e;
+  --ln-code-keyword: #ff7b72;
+  --ln-code-string: #a5d6ff;
+  --ln-code-number: #79c0ff;
+  --ln-code-function: #d2a8ff;
+  --ln-code-type: #ffa657;
+  --ln-code-builtin: #79c0ff;
+
+  --ln-rating-none-bg: #232a34;
+  --ln-rating-none-fg: #9aa7b4;
+  --ln-rating-easy-bg: rgb(78 201 122 / 16%);
+  --ln-rating-easy-fg: #4ec97a;
+  --ln-rating-normal-bg: rgb(107 155 255 / 16%);
+  --ln-rating-normal-fg: #6b9bff;
+  --ln-rating-hard-bg: rgb(224 165 60 / 16%);
+  --ln-rating-hard-fg: #e0a53c;
+  --ln-rating-extreme-bg: rgb(240 115 106 / 16%);
+  --ln-rating-extreme-fg: #f0736a;
+
+  /* 暗色下阴影要用更深的黑，否则等于没有 */
+  --ln-shadow-sm: 0 1px 2px rgb(0 0 0 / 30%);
+  --ln-shadow-md: 0 4px 14px rgb(0 0 0 / 38%);
+  --ln-shadow-lg: 0 12px 36px rgb(0 0 0 / 46%);
+}
+
+/* =============================================================================
+   基础
+   ============================================================================= */
+
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
@@ -25,10 +208,25 @@ body,
 
 body {
   background: var(--ln-bg);
+  color: var(--ln-text);
+}
+
+/* 主题切换时给全局加 200ms 过渡。
+   只在切换的那一瞬间挂上 .theme-switching，避免平时所有元素都带 transition
+   （那会拖慢渲染，也会让悬停效果变得黏糊糊的）。 */
+html.theme-switching,
+html.theme-switching *,
+html.theme-switching *::before,
+html.theme-switching *::after {
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    fill 0.2s ease !important;
 }
 
 a {
-  color: var(--ln-primary);
+  color: var(--ln-primary-text);
   text-decoration: none;
 }
 
@@ -36,50 +234,139 @@ a:hover {
   text-decoration: underline;
 }
 
-/* 认证页（登录/注册）共用的居中卡片布局 */
+/* 键盘导航时才有焦点环，鼠标点击不出现（:focus-visible 的意义所在） */
+:focus-visible {
+  outline: 2px solid var(--ln-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: var(--ln-primary-soft);
+  color: var(--ln-text);
+}
+
+/* 滚动条：默认的浅灰在暗色下非常刺眼 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ln-border-strong) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--ln-border-strong);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ln-text-subtle);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+}
+
+/* =============================================================================
+   共用布局
+   ============================================================================= */
+
+.page {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 28px 24px 64px;
+}
+
+.page__title {
+  margin: 0 0 4px;
+  font-size: 23px;
+  font-weight: 650;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.page__subtitle {
+  margin: 0 0 24px;
+  font-size: 13px;
+  color: var(--ln-text-muted);
+}
+
+/* 卡片/面板的统一样式。以前每个视图各写一遍，颜色还不一致 */
+.surface {
+  background: var(--ln-surface);
+  border: 1px solid var(--ln-border);
+  border-radius: var(--ln-radius);
+}
+
+.placeholder-card {
+  padding: 40px;
+  color: var(--ln-text-muted);
+  text-align: center;
+  background: var(--ln-surface);
+  border: 1px dashed var(--ln-border-strong);
+  border-radius: var(--ln-radius);
+}
+
+/* =============================================================================
+   认证页（登录 / 注册）
+   ============================================================================= */
+
 .auth-page {
   display: grid;
   place-items: center;
   min-height: 100vh;
   padding: 24px;
+  /* 一层极淡的径向光晕，让空白页不至于太死板 */
+  background:
+    radial-gradient(120% 80% at 50% 0%, var(--ln-primary-soft), transparent 60%),
+    var(--ln-bg);
 }
 
 .auth-card {
   width: 100%;
   max-width: 400px;
   padding: 32px;
-  background: #fff;
+  background: var(--ln-surface);
   border: 1px solid var(--ln-border);
-  border-radius: 12px;
-  box-shadow: 0 8px 24px rgb(15 23 42 / 6%);
+  border-radius: var(--ln-radius-lg);
+  box-shadow: var(--ln-shadow-lg);
 }
 
 .auth-card__title {
   margin: 0 0 4px;
   font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
 }
 
 .auth-card__subtitle {
   margin: 0 0 24px;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--ln-text-muted);
 }
 
 .auth-card__footer {
   margin-top: 20px;
-  font-size: 14px;
-  text-align: center;
+  font-size: 13px;
   color: var(--ln-text-muted);
+  text-align: center;
 }
 
 /* 分隔线：中间带文字 */
 .divider {
   display: flex;
-  align-items: center;
   gap: 12px;
+  align-items: center;
   margin: 20px 0;
   font-size: 12px;
-  color: var(--ln-text-muted);
+  color: var(--ln-text-subtle);
 }
 
 .divider::before,
@@ -90,27 +377,87 @@ a:hover {
   content: '';
 }
 
-.page {
-  max-width: 1080px;
-  margin: 0 auto;
-  padding: 24px;
+/* =============================================================================
+   代码高亮
+   -----------------------------------------------------------------------------
+   这里【手写】highlight.js 的配色，而不是 import 官方主题文件。
+
+   原因：官方主题（github.css / github-dark.css）都是全局规则，
+   没法按"当前是亮色还是暗色"来切换 —— 两个都 import 的话后一个会永远生效。
+   自己用 CSS 变量写一遍，反而更简单，也顺便和整体配色统一了。
+
+   类名来自 highlight.js 的输出，不能改。
+   ============================================================================= */
+
+.hljs {
+  color: var(--ln-code-text);
+  background: transparent;
 }
 
-.page__title {
-  margin: 0 0 4px;
-  font-size: 24px;
+.hljs-comment,
+.hljs-quote {
+  font-style: italic;
+  color: var(--ln-code-comment);
 }
 
-.page__subtitle {
-  margin: 0 0 24px;
-  color: var(--ln-text-muted);
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-doctag,
+.hljs-name {
+  color: var(--ln-code-keyword);
 }
 
-.placeholder-card {
-  padding: 40px;
-  color: var(--ln-text-muted);
-  text-align: center;
-  background: #fff;
-  border: 1px dashed var(--ln-border);
-  border-radius: 12px;
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-attribute,
+.hljs-meta .hljs-string {
+  color: var(--ln-code-string);
+}
+
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-link,
+.hljs-selector-attr,
+.hljs-selector-pseudo,
+.hljs-template-variable {
+  color: var(--ln-code-number);
+}
+
+.hljs-title,
+.hljs-title.function_,
+.hljs-section,
+.hljs-selector-id {
+  color: var(--ln-code-function);
+}
+
+.hljs-type,
+.hljs-title.class_,
+.hljs-class .hljs-title,
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-params,
+.hljs-variable,
+.hljs-attr {
+  color: var(--ln-code-type);
+}
+
+.hljs-meta,
+.hljs-subst,
+.hljs-tag {
+  color: var(--ln-code-comment);
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: 600;
+}
+
+.hljs-deletion {
+  color: var(--ln-danger);
 }

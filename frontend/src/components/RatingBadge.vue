@@ -50,27 +50,31 @@ const label = computed(() =>
   font-variant-numeric: tabular-nums;
   text-align: center;
   border-radius: 4px;
-  background: #f0f0f3;
-  color: #6b6b76;
+}
+
+/* 配色走 CSS 变量，亮暗两套在 main.css 里统一定义 */
+.rating--none {
+  color: var(--ln-rating-none-fg);
+  background: var(--ln-rating-none-bg);
 }
 
 .rating--easy {
-  background: #e8f7ee;
-  color: #1f8a4c;
+  color: var(--ln-rating-easy-fg);
+  background: var(--ln-rating-easy-bg);
 }
 
 .rating--normal {
-  background: #e8f1fd;
-  color: #2b6cb0;
+  color: var(--ln-rating-normal-fg);
+  background: var(--ln-rating-normal-bg);
 }
 
 .rating--hard {
-  background: #fdf1e3;
-  color: #b5600d;
+  color: var(--ln-rating-hard-fg);
+  background: var(--ln-rating-hard-bg);
 }
 
 .rating--extreme {
-  background: #fdeaea;
-  color: #c0392b;
+  color: var(--ln-rating-extreme-fg);
+  background: var(--ln-rating-extreme-bg);
 }
 </style>

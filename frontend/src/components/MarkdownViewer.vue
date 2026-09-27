@@ -63,7 +63,7 @@ const html = computed(() => renderMarkdown(props.source))
 }
 
 .markdown-body a {
-  color: var(--ln-primary);
+  color: var(--ln-primary-text);
 }
 
 .markdown-body blockquote {
@@ -77,7 +77,7 @@ const html = computed(() => renderMarkdown(props.source))
   padding: 2px 5px;
   font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
   font-size: 13px;
-  background: rgb(15 23 42 / 6%);
+  background: var(--ln-code-inline-bg);
   border-radius: 4px;
 }
 
@@ -85,9 +85,9 @@ const html = computed(() => renderMarkdown(props.source))
   padding: 14px 16px;
   margin: 14px 0;
   overflow-x: auto;
-  background: #f6f8fa;
+  background: var(--ln-code-bg);
   border: 1px solid var(--ln-border);
-  border-radius: 8px;
+  border-radius: var(--ln-radius-sm);
 }
 
 .markdown-body pre.hljs code {

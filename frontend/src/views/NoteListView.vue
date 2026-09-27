@@ -146,6 +146,7 @@ onMounted(async () => {
       <n-input
         v-model:value="query.keyword"
         placeholder="搜索标题或正文，回车搜索"
+        :input-props="{ 'aria-label': '搜索笔记' }"
         clearable
         style="max-width: 260px"
         @keyup.enter="resetAndFetch"
@@ -154,29 +155,40 @@ onMounted(async () => {
       <n-select
         v-model:value="query.difficulty"
         :options="DIFFICULTY_OPTIONS"
+        :input-props="{ 'aria-label': '按难度筛选' }"
         style="width: 130px"
         @update:value="resetAndFetch"
       />
       <n-select
         v-model:value="query.tagId"
         :options="tagOptions"
+        :input-props="{ 'aria-label': '按标签筛选' }"
         style="width: 150px"
         @update:value="resetAndFetch"
       />
       <n-select
         v-model:value="query.status"
         :options="STATUS_OPTIONS"
+        :input-props="{ 'aria-label': '按状态筛选' }"
         style="width: 130px"
         @update:value="resetAndFetch"
       />
       <n-select
         v-model:value="query.sort"
         :options="SORT_OPTIONS"
+        :input-props="{ 'aria-label': '排序方式' }"
         style="width: 140px"
         @update:value="resetAndFetch"
       />
       <label class="starred">
-        <n-switch v-model:value="query.starredOnly" size="small" @update:value="resetAndFetch" />
+        <!-- 显式给 aria-label：<label> 包住按钮虽然理论上能建立关联，
+             但各浏览器/读屏器实现不一，写死更稳妥 -->
+        <n-switch
+          v-model:value="query.starredOnly"
+          size="small"
+          aria-label="只看收藏"
+          @update:value="resetAndFetch"
+        />
         <span>只看收藏</span>
       </label>
     </div>
@@ -230,9 +242,9 @@ onMounted(async () => {
   align-items: center;
   padding: 14px 16px;
   margin-bottom: 16px;
-  background: #fff;
+  background: var(--ln-surface);
   border: 1px solid var(--ln-border);
-  border-radius: 10px;
+  border-radius: var(--ln-radius);
 }
 
 .starred {
@@ -252,9 +264,9 @@ onMounted(async () => {
 
 .empty {
   padding: 60px 0;
-  background: #fff;
+  background: var(--ln-surface);
   border: 1px solid var(--ln-border);
-  border-radius: 10px;
+  border-radius: var(--ln-radius);
 }
 
 .pager {
