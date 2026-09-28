@@ -61,7 +61,48 @@ psql --version      # psql (PostgreSQL) 18.6
 
 ## 3. PostgreSQL
 
-### 启动 / 停止
+### 一键启停（推荐）
+
+四个服务各有各的启动方式，手工敲很容易漏。项目根目录提供了一个启动器：
+
+```powershell
+# 双击 LeetNote.bat 打开菜单，或命令行直接用：
+.\start-all.ps1              # 启动全部
+.\start-all.ps1 -Only api    # 只启动某一个（db / api / ai / web）
+.\start-all.ps1 -Restart     # 重启
+.\stop-all.ps1               # 停止（-KeepDb 保留数据库）
+.\status.ps1                 # 查看状态
+```
+
+菜单长这样：
+
+```
+  ╭────────────────────────────────────────────────────────────╮
+  │ LeetNote · 算法练习笔记                2026-09-28 19:31:08 │
+  ╰────────────────────────────────────────────────────────────╯
+
+    服务          端口    状态                      PID
+    ························································
+    ✅ PostgreSQL  :5432   accepting connections     25992
+    ✅ Go 服务     :8080   HTTP 200                  28620
+    ✅ AI 服务     :8000   HTTP 200                  17676
+    ✅ 前端        :5173   HTTP 200                  11248
+
+    🌐 打开 http://localhost:5173
+```
+
+**几个封装掉的细节**（这些正是手工启动容易踩的坑）：
+
+| 服务 | 不能怎么做 | 为什么 |
+|---|---|---|
+| 全部 | 直接在 shell 里 `go run` | 进程是 shell 的子进程，shell 一退就被带走；必须用 `Start-Process` 脱离 |
+| AI 服务 | `uvicorn app.main:app` | uvicorn 把 `ProactorEventLoop` 硬编码进 loop factory，与 psycopg3 异步不兼容，必须走 `run.py` |
+| AI 服务 | 用 Anaconda 的 Python | 那套配的 OpenSSL 不兼容，所有 HTTPS 请求会失败 |
+| PostgreSQL | 直接杀进程 | 要用 `pg_ctl` 干净停止，否则下次启动可能要做恢复 |
+
+服务清单在 `scripts/services.ps1` 里**只写一遍**，加新服务改一个文件即可。
+
+### 手工启停（备用）
 
 ```powershell
 D:\dev\pg-start.ps1     # 启动

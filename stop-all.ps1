@@ -1,60 +1,75 @@
-# 停止 LeetNote 的四个服务。
+# =============================================================
+# 停止 LeetNote 的服务
+# =============================================================
 #
 # 用法：
-#     .\stop-all.ps1             # 停全部（PostgreSQL 默认也停）
+#     .\stop-all.ps1             # 停全部（PostgreSQL 也停）
 #     .\stop-all.ps1 -KeepDb     # 保留 PostgreSQL（它启动较慢，重启用得上）
+#     .\stop-all.ps1 -Quiet      # 少打印（给启动器调用）
 #
-# 注意：这里只停【本项目占用的端口】上的进程，不会误伤别的项目。
+# 只停【本项目占用的端口】上的进程，不会误伤别的项目。
+# 服务清单在 scripts/services.ps1 里统一定义。
 
 param(
-    [switch]$KeepDb
+    [switch]$KeepDb,
+    [switch]$Quiet
 )
 
-$ports = @(
-    @{ Port = 5173; Name = '前端' },
-    @{ Port = 8000; Name = 'AI 服务' },
-    @{ Port = 8080; Name = 'Go 服务' },
-    @{ Port = 5432; Name = 'PostgreSQL' }
-)
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
 
-foreach ($p in $ports) {
-    if ($p.Port -eq 5432 -and $KeepDb) {
-        Write-Host ("  ⏭  {0,-10} :{1}（按要求保留）" -f $p.Name, $p.Port) -ForegroundColor DarkGray
+. "$PSScriptRoot\scripts\services.ps1"
+
+# 停止顺序：先停应用，最后停数据库（应用可能还在写库）
+$stopOrder = @('web', 'ai', 'api', 'db')
+
+foreach ($key in $stopOrder) {
+    $svc = Get-LeetNoteServices | Where-Object Key -eq $key
+
+    if ($key -eq 'db' -and $KeepDb) {
+        if (-not $Quiet) {
+            Write-Host ("  ⏭  {0,-11} :{1}（按要求保留）" -f $svc.Name, $svc.Port) -ForegroundColor DarkGray
+        }
         continue
     }
 
-    $conn = Get-NetTCPConnection -LocalPort $p.Port -State Listen -EA SilentlyContinue |
+    $conn = Get-NetTCPConnection -LocalPort $svc.Port -State Listen -ErrorAction SilentlyContinue |
         Select-Object -First 1
 
     if (-not $conn) {
-        Write-Host ("  ⚪ {0,-10} :{1} 未运行" -f $p.Name, $p.Port) -ForegroundColor DarkGray
+        if (-not $Quiet) {
+            Write-Host ("  ⚪ {0,-11} :{1} 未运行" -f $svc.Name, $svc.Port) -ForegroundColor DarkGray
+        }
         continue
     }
 
     # PostgreSQL 用 pg_ctl 停才干净（直接杀进程下次启动可能要恢复）
-    if ($p.Port -eq 5432) {
-        $pgCtl = 'D:\dev\pg-stop.ps1'
-        if (Test-Path $pgCtl) {
-            & $pgCtl | Out-Null
-            Write-Host ("  ✅ {0,-10} :{1}" -f $p.Name, $p.Port) -ForegroundColor Green
+    if ($key -eq 'db') {
+        $pgStop = 'D:\dev\pg-stop.ps1'
+        if (Test-Path $pgStop) {
+            & $pgStop *> $null
+            Write-Host ("  ✅ {0,-11} :{1}" -f $svc.Name, $svc.Port) -ForegroundColor Green
             continue
         }
     }
 
-    $proc = Get-Process -Id $conn.OwningProcess -EA SilentlyContinue
-    if ($proc) {
-        # 前端是 cmd.exe 拉起来的，连子进程一起收掉，否则 5173 会留在 LISTEN
-        Stop-Process -Id $proc.Id -Force -EA SilentlyContinue
-        Write-Host ("  ✅ {0,-10} :{1}（pid {2}）" -f $p.Name, $p.Port, $proc.Id) -ForegroundColor Green
-    }
+    Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue
+    Write-Host ("  ✅ {0,-11} :{1}（pid {2}）" -f $svc.Name, $svc.Port, $conn.OwningProcess) -ForegroundColor Green
 }
 
-# 前端用 cmd → node 两层进程，收掉 cmd 后 node 可能还占着端口，补一刀
-foreach ($port in 5173, 8080, 8000) {
-    $left = Get-NetTCPConnection -LocalPort $port -State Listen -EA SilentlyContinue |
+# 前端是 cmd.exe → node 两层进程，收掉 cmd 后 node 可能还占着端口，补一刀。
+# 稍微等一下再检查，否则进程还没来得及释放端口。
+Start-Sleep -Milliseconds 600
+
+foreach ($key in $stopOrder) {
+    if ($key -eq 'db' -and $KeepDb) { continue }
+
+    $svc = Get-LeetNoteServices | Where-Object Key -eq $key
+    $left = Get-NetTCPConnection -LocalPort $svc.Port -State Listen -ErrorAction SilentlyContinue |
         Select-Object -First 1
+
     if ($left) {
-        Stop-Process -Id $left.OwningProcess -Force -EA SilentlyContinue
-        Write-Host ("  ✅ 清理残留 :{0}" -f $port) -ForegroundColor Green
+        Stop-Process -Id $left.OwningProcess -Force -ErrorAction SilentlyContinue
+        Write-Host ("  ✅ 清理残留 {0} :{1}" -f $svc.Name, $svc.Port) -ForegroundColor Green
     }
 }
