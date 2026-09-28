@@ -176,7 +176,7 @@ LeetNote 想把这件事系统化：
 
 | 用途 | 选型 |
 |---|---|
-| 数据库迁移 | golang-migrate（版本化 SQL） |
+| 数据库迁移 | **golang-migrate**（作为库引入，封装成 `cmd/migrate` 子命令，无需装 CLI） |
 | 测试 | Go `testing` + `httptest`；Python `pytest` + `pytest-asyncio` |
 | 代码规范 | `gofmt` / `go vet` / `vue-tsc` |
 | 版本控制 | Git + GitHub（SSH over 443，免代理直连） |
@@ -235,15 +235,23 @@ flowchart LR
 ### 1. 数据库
 
 ```bash
-createdb leetnote
-psql -d leetnote -f leetnote-api/migrations/000001_init.up.sql
-# 用超级用户创建向量扩展（普通用户会 permission denied）
-psql -U postgres -d leetnote -c "CREATE EXTENSION IF NOT EXISTS vector;"
-psql -d leetnote -f leetnote-api/migrations/000002_pgvector.up.sql
-psql -d leetnote -f leetnote-api/migrations/000003_case_insensitive_identity.up.sql
-psql -d leetnote -f leetnote-api/migrations/000004_oauth_github.up.sql
-psql -d leetnote -f leetnote-api/migrations/000005_problem_tags.up.sql
+cd leetnote-api
+
+# ① 装扩展 —— 需要超级用户，只需一次
+#    （pgvector 不是 trusted 扩展，应用账号装不了，所以单独拎出来）
+psql -U postgres -d leetnote -f scripts/init-extensions.sql
+
+# ② 建表 —— 用应用账号跑版本化迁移
+go run ./cmd/migrate up
+go run ./cmd/migrate version      # 应为 6
+
+# 也可以用封装好的任务（内部就是上面两条）
+./dev.ps1 db-init
+./dev.ps1 migrate-up
 ```
+
+> 迁移器是**项目自带的子命令**（`cmd/migrate`），不需要单独安装 golang-migrate CLI——
+> 换台机器只要有 Go 就能跑，少一个「clone 下来卡住」的坎。
 
 ### 2. 后端（Go）
 
@@ -315,7 +323,11 @@ leetnote/
 ├── leetnote-api/                    # Go 主服务
 │   ├── cmd/
 │   │   ├── server/                  #   入口：装配依赖 + 优雅关闭
+│   │   ├── migrate/                 #   数据库迁移（golang-migrate 的封装）
 │   │   └── importer/                #   题单导入 CLI（幂等）
+│   ├── migrations/                  #   6 个版本化迁移，up/down 成对
+│   ├── scripts/
+│   │   └── init-extensions.sql      #   装扩展（需超级用户，一次性）
 │   ├── internal/
 │   │   ├── config/                  #   环境变量 → 结构体
 │   │   ├── logging/                 #   slog 结构化日志
@@ -330,7 +342,7 @@ leetnote/
 │   │   ├── ai/                      #   leetnote-ai 的 HTTP 客户端
 │   │   ├── oauth/                   #   GitHub OAuth 客户端
 │   │   └── pkg/                     #   errs / jwt / hash / response
-│   └── migrations/                  # 5 个版本化 SQL 迁移
+│   └── migrations/                  # 6 个版本化 SQL 迁移（up + down 成对）
 │
 ├── leetnote-ai/                     # Python AI 服务
 │   ├── run.py                       #   入口（事件循环适配，见文档）
@@ -410,6 +422,7 @@ leetnote/
 | **换肤只切一个类名** | 颜色全走 CSS 变量，`<html>` 上加一个 `.dark` 就完成整站换肤；组件里零硬编码颜色 |
 | **暗色不用纯白** | 纯白配深底会"发光"，正文用 `#e6edf3`（14.6:1）——对比度足够但柔和不刺眼 |
 | **主色分两个 token** | `--ln-primary` 给按钮底色，`--ln-primary-text` 给文字。同一个蓝色当文字放在浅色底上只有 4.05:1，不达标 |
+| **迁移只测 up 是不够的** | `down` 漏写一个文件，只有跑完整的 `up → down → up` 往返才会暴露。现在用**临时库从零重建 + 与生产库 schema 逐行 diff** 来验证迁移集 |
 | **推理模型陷阱** | 推理模型会先输出一大段 reasoning，`max_tokens` 太小会把正文挤成空字符串 |
 | **前端 401 自动刷新** | 单飞（并发只刷一次）+ 独立 axios 实例（避免递归） |
 
@@ -427,6 +440,9 @@ leetnote/
 - **Naive 的 `n-form-item` 标签没有 `for`** —— 渲染出来的 `<label>` 和输入框之间没有程序化关联，屏幕阅读器读不出名称，必须自己补 `aria-label`
 - **`n-input` 的 `aria-label` 落错地方** —— Naive 会把未知属性透传到外层 div，而不是内层 `<input>`；要用 `:input-props="{ 'aria-label': ... }"` 才生效
 - **暗色主题对象有 65KB** —— Naive 的 `darkTheme` 覆盖全库组件、无法 tree-shaking，这是换全库暗色适配的固定代价
+- **迁移文件里不能写 `CREATE EXTENSION`** —— pgvector 不是 trusted 扩展，只有超级用户能装；写在迁移里会让它永远卡住并变 `dirty`。装扩展（超级用户，一次性）和建表（应用账号，可重复）必须分开
+- **迁移必须 up/down 成对** —— `000002` 一开始只有 up 没有 down，导致回滚到底时 `note_embeddings` 残留、把 000001 删 `notes` 的外键依赖卡住。这个 bug 只有跑完整的 `up → down → up` 往返才会暴露，只测 `up` 永远发现不了
+- **PowerShell 变量名不区分大小写** —— `dev.ps1` 里已有的 `$version = 'dev'` 和新加的 `[int]$Version` 是同一个变量，赋值直接抛类型转换错误
 
 ---
 

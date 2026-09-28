@@ -92,26 +92,58 @@ psql -U leetnote -h localhost -d leetnote -c "\dt"
 
 # 查看表结构
 psql -U leetnote -h localhost -d leetnote -c "\d+ notes"
+```
 
-# 执行迁移文件
-psql -U leetnote -h localhost -d leetnote -f migrations\000001_init.up.sql
+### 数据库迁移
 
-# 重置数据库（清空重建）
+迁移用 **golang-migrate** 管理，但**不需要单独安装它的 CLI** ——
+项目把它作为库引进来，封装成了 `cmd/migrate` 子命令，有 Go 环境就能跑：
+
+```powershell
+cd leetnote-api
+
+.\dev.ps1 db-init                    # 【首次】装扩展，需超级用户（见下）
+.\dev.ps1 migrate-up                 # 应用所有未执行的迁移
+.\dev.ps1 migrate-version            # 查看当前版本
+.\dev.ps1 migrate-down               # 回滚 1 步
+.\dev.ps1 migrate-down -Steps 3      # 回滚 3 步
+.\dev.ps1 migrate-force -DbVersion 6 # 强制设定版本（不执行任何 SQL）
+```
+
+直接调 `go run` 也一样：
+
+```powershell
+go run ./cmd/migrate up
+go run ./cmd/migrate version
+```
+
+版本号记录在 `schema_migrations` 表里，重复执行 `up` 是安全的（已是最新会提示无需迁移）。
+
+> **`migrate-force` 用在哪**：数据库结构已经手工建好、或迁移中途失败已修好时，
+> 用它把版本对齐到实际状态。它**只改版本记录，不执行任何 SQL**。
+
+### 重置数据库（清空重建）
+
+```powershell
 psql -U postgres -h localhost -c "DROP DATABASE leetnote;"
 psql -U postgres -h localhost -c "CREATE DATABASE leetnote OWNER leetnote;"
-psql -U leetnote -h localhost -d leetnote -f migrations\000001_init.up.sql
+
+cd leetnote-api
+.\dev.ps1 db-init      # 装扩展（超级用户）
+.\dev.ps1 migrate-up   # 建表（应用账号）
 ```
 
 > Windows 终端里 `psql` 的中文提示可能显示为乱码，那是**终端编码问题**，不影响功能。
 > 想看清中文可以执行：`chcp 65001`（切到 UTF-8 代码页）。
 
-### 已创建的表（8 张）
+### 已创建的表（11 张）
 
 ```
-users · problems · tags · notes · solutions · note_tags · review_cards · review_logs
+users · problems · tags · notes · solutions · note_tags
+problem_tags · review_cards · review_logs · oauth_accounts · note_embeddings
 ```
 
-对应迁移文件：`leetnote-api/migrations/000001_init.up.sql`
+对应 6 个版本化迁移：`leetnote-api/migrations/000001` ~ `000006`。
 
 ### 已启用的扩展
 
@@ -189,11 +221,44 @@ D:\dev\pg-start.ps1
 
 ```powershell
 # 用 postgres 超级用户创建（普通用户会报 permission denied）
+cd leetnote-api
+.\dev.ps1 db-init
+```
+
+等价的手工方式：
+
+```powershell
 $env:PGPASSWORD='postgres'
-psql -U postgres -h localhost -d leetnote -c "CREATE EXTENSION IF NOT EXISTS vector;"
+psql -U postgres -h localhost -d leetnote -f scripts/init-extensions.sql
 ```
 
 > 扩展是**按数据库**创建的，换一个库要重新执行。
+
+**为什么这件事不能交给迁移去做**（这是一个真实的踩坑）：
+
+`pgvector` 的 control 文件里没有 `trusted = true`，**只有超级用户能装**。
+而迁移是用应用账号 `leetnote` 跑的，所以在迁移里写：
+
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;   -- ❌ 报 permission denied
+```
+
+会让整个迁移卡在版本 2、状态变成 `dirty`。
+
+对比之下 `pg_trgm` / `pgcrypto` 从 PostgreSQL 13 起标记为 `trusted`，
+普通用户也能装，所以它们放在 `000001` 里没问题。
+
+**职责要分清**：
+
+| 内容 | 由谁执行 | 放在哪 |
+|---|---|---|
+| 装扩展 | 超级用户，一次性 | `scripts/init-extensions.sql` |
+| 建表 / 加索引 | 应用账号，可重复 | `migrations/`（版本化） |
+
+> 这个坑的代价是：项目早期 6 个迁移文件**没有一个能由应用账号完整跑通**，
+> 表一直是手工 `psql -f` 建的，`schema_migrations` 表根本不存在——
+> 也就是说「版本化迁移」实际上没有在版本管理。
+> 现在已修正，并从零验证过 `up → down → up` 往返后 schema 与生产库完全一致。
 
 ### 验证
 

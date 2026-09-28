@@ -595,6 +595,58 @@ ease_factor = max(1.3, ease_factor)
 due_at = now() + interval_days 天
 ```
 
+### 5.7 迁移策略
+
+迁移用 **golang-migrate**，但**不作为 CLI 安装**，而是作为库引入、封装成
+`cmd/migrate` 子命令 —— 换台机器只要有 Go 就能跑，少一个「clone 下来卡住」的坎。
+
+```powershell
+.\dev.ps1 db-init                    # 装扩展（超级用户，一次性）
+.\dev.ps1 migrate-up                 # 建表（应用账号，可重复）
+.\dev.ps1 migrate-version            # 查看当前版本
+.\dev.ps1 migrate-down -Steps 3      # 回滚 3 步
+.\dev.ps1 migrate-force -DbVersion 6 # 强制设定版本（不执行 SQL）
+```
+
+版本号记录在 `schema_migrations` 表里，重复 `up` 安全。
+
+#### 职责边界：装扩展 ≠ 建表
+
+这是本项目踩过的一个真实大坑。
+
+`pgvector` 的 control 文件里没有 `trusted = true`，**只有超级用户能安装**；
+而迁移是用应用账号 `leetnote` 跑的。所以在迁移里写：
+
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;   -- ❌ permission denied → 迁移卡住变 dirty
+```
+
+后果是**6 个迁移文件没有一个能由应用账号完整跑通**，表一直是手工
+`psql -f` 建的，`schema_migrations` 表根本不存在 —— 「版本化迁移」名存实亡。
+
+正确划分：
+
+| 内容 | 执行者 | 频率 | 位置 |
+|---|---|---|---|
+| 装扩展 | 超级用户 | 一次性 | `scripts/init-extensions.sql` |
+| 建表 / 索引 | 应用账号 | 可重复 | `migrations/` |
+
+> `pg_trgm` / `pgcrypto` 从 PostgreSQL 13 起是 trusted，普通用户也能装，
+> 所以它们放在 `000001` 里没问题 —— 只有 `vector` 特殊。
+
+#### 怎么验证迁移集是对的
+
+只跑 `up` 是不够的（`000002` 曾经只有 up、没有 down，回滚到底时会因为
+`note_embeddings` 残留而失败，只测 up 永远发现不了）。验证方法是：
+
+1. 建一个临时库
+2. 用超级用户装扩展，再用应用账号跑 `up` → 应到版本 6
+3. `down 6` → 应回到空库（只剩 `schema_migrations`）
+4. `up` → 应再次到版本 6
+5. `pg_dump --schema-only` 分别导出临时库与真实库，**逐行 diff** → 应完全一致
+
+实测结果：两份 schema 各 204 行，零差异。
+
 ---
 
 ## 6. API 设计
@@ -1021,8 +1073,13 @@ document.documentElement.classList.toggle('dark', isDark)
 leetnote/
 ├── leetnote-api/                     # ★ Go 主服务
 │   ├── cmd/
-│   │   └── server/
-│   │       └── main.go               # 入口：装配依赖、启动 HTTP + gRPC
+│   │   ├── server/
+│   │   │   └── main.go               # 入口：装配依赖、启动 HTTP + gRPC
+│   │   ├── migrate/                  # 数据库迁移（golang-migrate 封装成子命令）
+│   │   └── importer/                 # 灵神题单导入（幂等）
+│   ├── migrations/                   # 6 个版本化迁移，up/down 成对
+│   ├── scripts/
+│   │   └── init-extensions.sql       # 装扩展（需超级用户，一次性）
 │   ├── internal/
 │   │   ├── config/                   # Viper 配置加载（.env → struct）
 │   │   ├── router/                   # 路由注册
