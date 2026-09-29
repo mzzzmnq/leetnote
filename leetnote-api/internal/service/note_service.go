@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -96,7 +98,11 @@ func (s *NoteService) Create(ctx context.Context, userID int64, in dto.NoteInput
 		}
 		noteID = note.ID
 
-		if err := solutionRepo.ReplaceForNote(ctx, noteID, buildSolutions(in.Solutions)); err != nil {
+		solutions, err := buildSolutions(in.Solutions)
+		if err != nil {
+			return err
+		}
+		if err := solutionRepo.ReplaceForNote(ctx, noteID, solutions); err != nil {
 			return err
 		}
 		return tagRepo.SetNoteTags(ctx, noteID, tagIDs)
@@ -188,7 +194,11 @@ func (s *NoteService) Update(ctx context.Context, userID, id int64, in dto.NoteI
 			return err
 		}
 
-		if err := solutionRepo.ReplaceForNote(ctx, id, buildSolutions(in.Solutions)); err != nil {
+		solutions, err := buildSolutions(in.Solutions)
+		if err != nil {
+			return err
+		}
+		if err := solutionRepo.ReplaceForNote(ctx, id, solutions); err != nil {
 			return err
 		}
 		return tagRepo.SetNoteTags(ctx, id, tagIDs)
@@ -248,14 +258,12 @@ func (s *NoteService) CreateSolution(ctx context.Context, userID, noteID int64, 
 		return nil, err
 	}
 
-	sol := &model.Solution{
-		NoteID:          noteID,
-		Title:           in.Title,
-		Language:        in.Language,
-		Code:            in.Code,
-		TimeComplexity:  in.TimeComplexity,
-		SpaceComplexity: in.SpaceComplexity,
+	sol, err := solutionFromInput(in)
+	if err != nil {
+		return nil, err
 	}
+	sol.NoteID = noteID
+
 	if err := s.solutions.Create(ctx, sol); err != nil {
 		return nil, err
 	}
@@ -263,15 +271,14 @@ func (s *NoteService) CreateSolution(ctx context.Context, userID, noteID int64, 
 }
 
 func (s *NoteService) UpdateSolution(ctx context.Context, userID, solutionID int64, in dto.SolutionInput) (*model.Solution, error) {
+	sol, err := solutionFromInput(in)
+	if err != nil {
+		return nil, err
+	}
+	sol.ID = solutionID
+
 	// 仓储层用子查询在 UPDATE 内部校验归属，一条 SQL 完成鉴权
-	return s.solutions.Update(ctx, userID, &model.Solution{
-		ID:              solutionID,
-		Title:           in.Title,
-		Language:        in.Language,
-		Code:            in.Code,
-		TimeComplexity:  in.TimeComplexity,
-		SpaceComplexity: in.SpaceComplexity,
-	})
+	return s.solutions.Update(ctx, userID, sol)
 }
 
 func (s *NoteService) DeleteSolution(ctx context.Context, userID, solutionID int64) error {
@@ -395,18 +402,41 @@ func (s *NoteService) scheduleEmbed(noteID int64) {
 	}()
 }
 
-func buildSolutions(inputs []dto.SolutionInput) []*model.Solution {
+// solutionFromInput 把 DTO 转成领域模型，顺便把语言归一化成规范形式。
+//
+// 【为什么放在这里而不是 DTO 层】解法有两条写入路径：
+//  1. 单独的解法接口（POST/PUT /notes/:id/solutions）
+//  2. 「保存笔记」时整批替换（笔记编辑器把解法一起提交）
+//
+// 两条都走这一个函数，就不会出现「从编辑器存的没归一化」这种漏网之鱼 ——
+// 这类"两条路径只改了一条"的问题在数据清洗时最头疼。
+func solutionFromInput(in dto.SolutionInput) (*model.Solution, error) {
+	lang, ok := model.NormalizeLanguage(in.Language)
+	if !ok {
+		return nil, errs.ErrBadRequest.WithMessage(
+			"不支持的语言 " + strconv.Quote(in.Language) + "，可选：" +
+				strings.Join(model.SupportedLanguageNames(), " / "))
+	}
+
+	return &model.Solution{
+		Title:           in.Title,
+		Language:        string(lang),
+		Code:            in.Code,
+		TimeComplexity:  in.TimeComplexity,
+		SpaceComplexity: in.SpaceComplexity,
+	}, nil
+}
+
+func buildSolutions(inputs []dto.SolutionInput) ([]*model.Solution, error) {
 	out := make([]*model.Solution, 0, len(inputs))
 	for _, in := range inputs {
-		out = append(out, &model.Solution{
-			Title:           in.Title,
-			Language:        in.Language,
-			Code:            in.Code,
-			TimeComplexity:  in.TimeComplexity,
-			SpaceComplexity: in.SpaceComplexity,
-		})
+		sol, err := solutionFromInput(in)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, sol)
 	}
-	return out
+	return out, nil
 }
 
 // normalizeTagIDs 去重并排序。

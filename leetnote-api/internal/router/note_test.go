@@ -326,10 +326,101 @@ func TestNoteValidation(t *testing.T) {
 	}
 }
 
+// 解法语言的归一化与白名单校验。
+//
+// 锁住两个行为：
+//  1. 常见别名与大小写要【静默归一化】（Golang → go）——
+//     否则前端「按语言分组」会把同一门语言拆成好几组
+//  2. 不支持的语言要明确报错，而不是把脏数据写进库
+//
+// 两条写入路径都要测：单独的解法接口，以及「保存笔记」时整批替换解法。
+// 早期最常见的疏漏就是只改了一条路径。
+func TestSolutionLanguageCanonical(t *testing.T) {
+	pool := testPool(t)
+	r := router.New(testConfig(), pool)
+	token, _ := registerAndLogin(t, r, pool)
+
+	// ---------- 路径一：保存笔记时整批提交解法 ----------
+	aliases := []struct{ input, want string }{
+		{"Golang", "go"},
+		{"JS", "javascript"},
+		{"C++", "cpp"},
+		{"  Python  ", "python"},
+		{"TS", "typescript"},
+		{"py", "python"},
+		{"nodejs", "javascript"},
+	}
+
+	solutions := make([]map[string]any, 0, len(aliases))
+	for _, a := range aliases {
+		solutions = append(solutions, map[string]any{
+			"title": "解法 " + a.input, "language": a.input, "code": "// x",
+		})
+	}
+
+	w := doJSON(t, r, http.MethodPost, "/api/v1/notes", map[string]any{
+		"title": "语言归一化", "content_md": "", "status": "published",
+		"solutions": solutions,
+	}, authHeader(token))
+	if w.Code != http.StatusCreated {
+		t.Fatalf("创建失败: %d %s", w.Code, w.Body.String())
+	}
+
+	note := decodeNote(t, w.Body.Bytes())
+	if len(note.Solutions) != len(aliases) {
+		t.Fatalf("解法数应为 %d, 实际 %d", len(aliases), len(note.Solutions))
+	}
+
+	// 返回顺序与提交顺序一致
+	for i, a := range aliases {
+		if got := note.Solutions[i].Language; got != a.want {
+			t.Errorf("语言 %q 应归一化为 %q, 实际 %q", a.input, a.want, got)
+		}
+	}
+
+	// ---------- 路径二：单独的解法接口 ----------
+	w = doJSON(t, r, http.MethodPost,
+		fmt.Sprintf("/api/v1/notes/%d/solutions", note.ID),
+		map[string]any{"title": "别名", "language": "GOLANG", "code": "x"},
+		authHeader(token))
+	if w.Code != http.StatusCreated {
+		t.Fatalf("新增解法失败: %d %s", w.Code, w.Body.String())
+	}
+
+	var sol dto.SolutionResponse
+	_ = json.Unmarshal(w.Body.Bytes(), &sol)
+	if sol.Language != "go" {
+		t.Errorf("GOLANG 应归一化为 go, 实际 %q", sol.Language)
+	}
+
+	// ---------- 不支持的语言：两条路径都必须拒绝 ----------
+	unsupported := []string{"rust", "swift", "kotlin", "brainfuck", "", "   "}
+
+	for _, lang := range unsupported {
+		w = doJSON(t, r, http.MethodPost,
+			fmt.Sprintf("/api/v1/notes/%d/solutions", note.ID),
+			map[string]any{"title": "x", "language": lang, "code": "x"},
+			authHeader(token))
+
+		// 空字符串会被 required 校验挡在 422，其余是业务校验的 400
+		if w.Code != http.StatusBadRequest && w.Code != http.StatusUnprocessableEntity {
+			t.Errorf("语言 %q 应被拒绝, 实际 HTTP %d, body=%s", lang, w.Code, w.Body.String())
+		}
+	}
+
+	// 整批提交路径同样要拒绝
+	w = doJSON(t, r, http.MethodPost, "/api/v1/notes", map[string]any{
+		"title": "带非法语言", "content_md": "", "status": "draft",
+		"solutions": []map[string]any{{"title": "x", "language": "rust", "code": "x"}},
+	}, authHeader(token))
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("整批提交非法语言应为 400, 实际 %d, body=%s", w.Code, w.Body.String())
+	}
+}
+
 // 未登录访问笔记接口必须被鉴权中间件拦下。
 func TestNoteRequiresAuth(t *testing.T) {
 	r := newTestRouter(t)
-
 	for _, path := range []string{"/api/v1/notes", "/api/v1/notes/1", "/api/v1/problems", "/api/v1/tags"} {
 		w := doJSON(t, r, http.MethodGet, path, nil, nil)
 		if w.Code != http.StatusUnauthorized {

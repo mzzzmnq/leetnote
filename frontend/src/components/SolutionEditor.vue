@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { computed, h } from 'vue'
 import { NButton, NInput, NSelect } from 'naive-ui'
+import type { SelectRenderLabel } from 'naive-ui'
 import type { SolutionInput } from '@/api/types'
+import { LANGUAGES, languageDotColor, languageLabel } from '@/utils/languages'
 
 const props = defineProps<{
   modelValue: SolutionInput
@@ -12,22 +15,23 @@ const emit = defineEmits<{
   remove: []
 }>()
 
-const LANGUAGES = [
-  'go',
-  'python',
-  'java',
-  'cpp',
-  'c',
-  'javascript',
-  'typescript',
-  'rust',
-  'csharp',
-  'kotlin',
-  'swift',
-  'sql',
-]
+const languageOptions = computed(() =>
+  LANGUAGES.map((lang) => ({ value: lang, label: languageLabel(lang) })),
+)
 
-const languageOptions = LANGUAGES.map((lang) => ({ label: lang, value: lang }))
+/**
+ * 下拉项渲染成「品牌色圆点 + 展示名」。
+ *
+ * 圆点颜色不走 options 里的自定义字段（Naive 的 SelectOption 类型没有它，
+ * 硬塞要到处 as 断言），而是按 value 现查 —— 一份数据一个来源。
+ */
+const renderLanguageLabel: SelectRenderLabel = (option) => {
+  const lang = String(option.value ?? '')
+  return h('span', { class: 'sol__lang' }, [
+    h('i', { class: 'sol__dot', style: { background: languageDotColor(lang) } }),
+    languageLabel(lang),
+  ])
+}
 
 // 不可变更新：每次 emit 一个新对象，父组件替换数组元素。
 // 直接改 props 里的字段是反模式（Vue 会警告，且难以追踪变更）。
@@ -54,9 +58,10 @@ function patch(field: keyof SolutionInput, value: string): void {
       <n-select
         :value="modelValue.language"
         :options="languageOptions"
+        :render-label="renderLanguageLabel"
         placeholder="语言"
         :input-props="{ 'aria-label': '语言' }"
-        style="width: 140px"
+        style="width: 150px"
         @update:value="(v: string) => patch('language', v)"
       />
     </div>
@@ -120,5 +125,18 @@ function patch(field: keyof SolutionInput, value: string): void {
 
 .sol__row > :first-child {
   flex: 1;
+}
+
+/* 语言下拉项前面的品牌色小圆点 */
+.sol__lang {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.sol__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
 }
 </style>

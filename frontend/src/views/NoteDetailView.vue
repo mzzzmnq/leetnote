@@ -4,10 +4,11 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { NAlert, NButton, NEmpty, NSpin, NTag, useDialog, useMessage } from 'naive-ui'
 import { ApiError } from '@/api/client'
 import { deleteNote, explainNote, fetchSimilarNotes, getNote, toggleStar } from '@/api/notes'
-import type { Note, SimilarNote } from '@/api/types'
+import type { Note, SimilarNote, Solution } from '@/api/types'
 import DifficultyTag from '@/components/DifficultyTag.vue'
 import MarkdownViewer from '@/components/MarkdownViewer.vue'
 import { formatDate } from '@/utils/format'
+import { languageDotColor, languageLabel, languageOrder } from '@/utils/languages'
 import { renderCodeBlock } from '@/utils/markdown'
 
 const route = useRoute()
@@ -31,6 +32,56 @@ const explainModel = ref('')
 const explainUsage = ref('')
 const explaining = ref(false)
 const explainError = ref('')
+
+// ---------------- 解法：按语言分组 ----------------
+
+/**
+ * 把解法按语言分组。
+ *
+ * 同一道题用不同语言各写一遍是很常见的（尤其在自己用 Go 重写 Python 解法时），
+ * 平铺着看很容易糊成一片。分组后能一眼看出「这道题我录了几种语言」。
+ *
+ * 组的顺序按 languages.ts 里的常用度排（Python / Go 在前），
+ * 组内保持原顺序 —— 那条顺序是用户在编辑器里定的（一般是最优解放前面）。
+ */
+const languageGroups = computed(() => {
+  const map = new Map<string, Solution[]>()
+  for (const sol of note.value?.solutions ?? []) {
+    const list = map.get(sol.language)
+    if (list) list.push(sol)
+    else map.set(sol.language, [sol])
+  }
+
+  return [...map.entries()]
+    .map(([language, solutions]) => ({ language, solutions }))
+    .sort((a, b) => languageOrder(a.language) - languageOrder(b.language))
+})
+
+/** 当前选中的语言 */
+const activeLanguage = ref('')
+
+/**
+ * 校正选中的语言。
+ *
+ * 笔记加载完成、或解法被增删之后，原来选中的语言可能已经不存在了，
+ * 这时要回落到第一个 —— 否则会出现「标签页全都不高亮、下面也不显示解法」。
+ */
+watch(
+  languageGroups,
+  (groups) => {
+    if (groups.length === 0) return
+    if (!groups.some((g) => g.language === activeLanguage.value)) {
+      activeLanguage.value = groups[0]!.language
+    }
+  },
+  { immediate: true },
+)
+
+/** 当前语言下的解法。找不到分组时退化成全部，避免页面空白 */
+const visibleSolutions = computed(() => {
+  const group = languageGroups.value.find((g) => g.language === activeLanguage.value)
+  return group ? group.solutions : (note.value?.solutions ?? [])
+})
 
 // 用 computed 而不是一次性取值。
 //
@@ -195,13 +246,45 @@ watch(
           <h2 class="solutions__title">
             解法
             <span class="solutions__count">{{ note.solutions.length }}</span>
+            <span v-if="languageGroups.length > 1" class="solutions__langs">
+              覆盖 {{ languageGroups.length }} 种语言
+            </span>
           </h2>
 
-          <article v-for="(sol, index) in note.solutions" :key="sol.id" class="solution">
+          <!--
+            语言标签页。
+            只有一种语言时不渲染 —— 没得切，多了只是视觉噪音。
+          -->
+          <div
+            v-if="languageGroups.length > 1"
+            class="lang-tabs"
+            role="tablist"
+            aria-label="按语言查看解法"
+          >
+            <button
+              v-for="group in languageGroups"
+              :key="group.language"
+              type="button"
+              role="tab"
+              class="lang-tab"
+              :class="{ 'lang-tab--active': group.language === activeLanguage }"
+              :aria-selected="group.language === activeLanguage"
+              @click="activeLanguage = group.language"
+            >
+              <i class="lang-tab__dot" :style="{ background: languageDotColor(group.language) }" />
+              <span class="lang-tab__name">{{ languageLabel(group.language) }}</span>
+              <span class="lang-tab__count">{{ group.solutions.length }}</span>
+            </button>
+          </div>
+
+          <article v-for="(sol, index) in visibleSolutions" :key="sol.id" class="solution">
             <header class="solution__head">
               <span class="solution__index">#{{ index + 1 }}</span>
               <span class="solution__title">{{ sol.title }}</span>
-              <n-tag size="small" :bordered="false">{{ sol.language }}</n-tag>
+              <!-- 只有一种语言时标签页不出现，这里补一个语言标记 -->
+              <n-tag v-if="languageGroups.length === 1" size="small" :bordered="false">
+                {{ languageLabel(sol.language) }}
+              </n-tag>
               <span v-if="sol.time_complexity" class="solution__cx">
                 时间 {{ sol.time_complexity }}
               </span>
@@ -347,6 +430,87 @@ watch(
   color: var(--ln-text-muted);
   background: var(--ln-bg);
   border-radius: var(--ln-radius);
+}
+
+.solutions__langs {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ln-text-muted);
+}
+
+/* ---------------- 语言标签页 ---------------- */
+
+.lang-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+  /* 标签多时横向滚动而不是换行挤压；配合下面的 -webkit 隐藏滚动条 */
+  padding-bottom: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.lang-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.lang-tab {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ln-text-muted);
+  cursor: pointer;
+  background: var(--ln-surface);
+  border: 1px solid var(--ln-border);
+  border-radius: 999px;
+  transition:
+    color 0.15s,
+    background-color 0.15s,
+    border-color 0.15s;
+}
+
+.lang-tab:hover {
+  color: var(--ln-text);
+  border-color: var(--ln-border-strong);
+}
+
+/*
+  选中态用主色的浅底 + 深文字。
+  注意文字用的是 --ln-primary-text 而不是 --ln-primary：
+  后者放在浅色底上只有 4.05:1，过不了 WCAG AA。
+*/
+.lang-tab--active {
+  font-weight: 600;
+  color: var(--ln-primary-text);
+  background: var(--ln-primary-soft);
+  border-color: transparent;
+}
+
+.lang-tab__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.lang-tab__name {
+  white-space: nowrap;
+}
+
+.lang-tab__count {
+  padding: 0 5px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  background: var(--ln-surface-active);
+  border-radius: 999px;
+}
+
+.lang-tab--active .lang-tab__count {
+  background: var(--ln-surface);
 }
 
 .solution {

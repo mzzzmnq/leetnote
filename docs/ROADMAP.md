@@ -149,6 +149,7 @@ leetnote-ai    (Python + FastAPI)  → RAG 相似题检索、LLM 解法讲解、
 - [x] **无障碍达标**：逐元素实测对比度，修掉 7 处不达标（导航选中 4.05:1、Naive 占位符 1.78:1、标签文字 1.93:1、空状态 1.78:1、头像 1.61:1、分页 4.24:1、星标 1.51:1）；给全部输入控件补可访问名称；**Lighthouse 无障碍 1.0**（9 页面 × 亮暗双主题零失败）。踩到两个 Naive 的坑：`n-form-item` 的 `label` 没有 `for`、`n-input` 的 `aria-label` 会落到外层 div
 - [x] **迁移链路修复**：发现 6 个「版本化迁移」其实**从未真正跑通过** —— `000002` 里的 `CREATE EXTENSION vector` 需要超级用户，应用账号执行必报 `permission denied`，所以表一直是手工 `psql -f` 建的，`schema_migrations` 表根本不存在。修法：把「装扩展」（超级用户，一次性，`scripts/init-extensions.sql`）与「建表」（应用账号，可重复，`migrations/`）拆开；补上 `000002` 缺失的 down 文件（否则回滚到底会被 `note_embeddings` 的外键卡住）；把 golang-migrate 作为**库**引入并封装成 `cmd/migrate` 子命令，免去装 CLI 这一步。验证方式：临时库从零跑 `up → down 6 → up`，再把两份 `pg_dump --schema-only` 逐行 diff，204 行零差异
 - [x] **一键启动器**：四个服务各有各的启动方式（PostgreSQL 要 `pg_ctl`、AI 必须用 `run.py`、前端是 `cmd` 拉 `npm`），每次重开机要手工敲四遍。做了 `LeetNote.bat`（双击）+ `launcher.ps1`（交互菜单：启动/停止/重启/状态/打开网页/看日志/首次初始化），并把端口与名称抽成 `scripts/services.ps1` 单一事实来源。关键点是所有服务都必须用 `Start-Process` **真正脱离 shell** —— 否则 shell 一退服务就被带走（这是反复踩到的）
+- [x] **多语言解法**：同一道题可以用多种语言各写一遍，解法按语言分组、用标签页切换（带品牌色圆点与数量角标），一眼看出「这道题我录了几种语言」。语言清单从 12 种收敛到 7 种（Python / Go / TypeScript / JavaScript / Java / C++ / C），后端统一归一化（`Golang`/`js`/`C++`/`PYTHON` 都收敛到规范值），迁移 `000007` 加 `CHECK` 约束兜底。归一化只写在一个函数里，覆盖「单独解法接口」与「保存笔记整批替换」两条写入路径
 - [ ] **M8 剩余**：Redis 缓存与限流、图片上传
 - [ ] **收尾**：部署上线（Vercel + Render + Neon）、README、简历素材整理
 - [x] **M4 完成**：前端骨架 —— Vue 3 + TS + Vite + Pinia + Naive UI；登录/注册/GitHub 回调/概览/设置页；**401 单飞自动刷新**（并发只刷一次，独立 axios 实例防递归）；页面刷新后靠 refresh Cookie 自动恢复会话；`vue-tsc` 类型检查与生产构建均通过

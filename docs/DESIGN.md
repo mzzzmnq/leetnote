@@ -647,6 +647,61 @@ CREATE EXTENSION IF NOT EXISTS vector;   -- ❌ permission denied → 迁移卡�
 
 实测结果：两份 schema 各 204 行，零差异。
 
+### 5.8 枚举值治理：以「解法语言」为例
+
+`solutions.language` 一开始是自由文本（`VARCHAR(20)`，无约束）。这看起来最灵活，
+实际会埋一个很难修的问题：
+
+```
+Python / python / PY / py / python3   →  五个不同的值
+```
+
+一旦前端要「按语言分组」或者统计「我用几种语言写过解法」，结果就完全错乱，
+而且历史数据很难事后清洗（没法确定 `py` 到底该并到哪个桶）。
+
+#### 三层防护
+
+| 层 | 做什么 | 位置 |
+|---|---|---|
+| 入口 | 归一化别名与大小写；不认识的值直接报错 | `internal/model/language.go` |
+| 领域 | 白名单是编译期常量，前后端共用同一份语义 | 同上 |
+| 存储 | `CHECK` 约束兜底，绕过 API 也写不进脏值 | 迁移 `000007` |
+
+归一化的规则很朴素：**去空白 → 转小写 → 查别名表 → 查规范表**。
+
+```go
+NormalizeLanguage("Golang")     // → "go", true
+NormalizeLanguage("  PYTHON  ") // → "python", true
+NormalizeLanguage("rust")       // → "", false   ← 明确拒绝
+```
+
+#### 归一化只写在一个地方
+
+解法有**两条写入路径**：
+
+1. `POST /notes/:id/solutions`（单条）
+2. `POST /notes`、`PUT /notes/:id`（保存笔记时整批替换 `solutions`）
+
+两条路径都走同一个 `solutionFromInput()`，避免「只改了接口那条、编辑器那条漏了」
+这种经典漏网。集成测试对两条路径都做了断言。
+
+#### 迁移遇到不认识的值应该报错，而不是猜
+
+`000007` 在加约束之前先做一次归一化，然后检查是否还有白名单外的值。
+有的话**直接 RAISE EXCEPTION 让迁移失败**：
+
+```sql
+RAISE EXCEPTION
+    E'存在不受支持的语言：%\n请在 SupportedLanguages 里补上，或先把这些数据改掉。',
+    unsupported;
+```
+
+削足适履地把 `rust` 悄悄改成 `python` 会静默丢信息。宁可让迁移停下来，
+把选择权交给执行的人。
+
+> 回滚时**只删约束、不解归一化** —— 原值在归一化那一刻就丢了，无法还原。
+> 数据迁移本身就是单向的，假装能回滚反而更危险。
+
 ---
 
 ## 6. API 设计
