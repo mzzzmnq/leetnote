@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -20,6 +21,19 @@ type Config struct {
 	JWTSecret  string        `envconfig:"JWT_SECRET" required:"true"`
 	AccessTTL  time.Duration `envconfig:"ACCESS_TOKEN_TTL" default:"15m"`
 	RefreshTTL time.Duration `envconfig:"REFRESH_TOKEN_TTL" default:"168h"`
+
+	// CookieSecure 控制 refresh cookie 是否带 Secure 属性（只有 HTTPS 才传）。
+	//
+	// 【为什么不直接用 IsProduction()】这两件事不是一回事：
+	// "是不是生产环境" 决定日志格式、Gin 模式；
+	// "cookie 要不要 Secure" 只取决于**当前是不是走 HTTPS**。
+	//
+	// 混在一起的后果很隐蔽：在 Docker 里用 http://localhost 访问、
+	// 同时 APP_ENV=production 时，浏览器会因为 Secure 属性拒绝存储 cookie，
+	// 表现为「登录接口返回 200，但刷新页面就掉登录」—— 很难查。
+	//
+	// 不填时的默认值见 IsCookieSecure()：生产环境为 true，其余为 false。
+	CookieSecure string `envconfig:"COOKIE_SECURE"`
 
 	AIGRPCAddr  string   `envconfig:"AI_GRPC_ADDR" default:"localhost:9090"`
 	CORSOrigins []string `envconfig:"CORS_ORIGINS" default:"http://localhost:5173"`
@@ -44,6 +58,21 @@ type Config struct {
 // IsProduction 用于判断是否开启 JSON 日志、Gin Release 模式等。
 func (c *Config) IsProduction() bool {
 	return c.AppEnv == "production"
+}
+
+// IsCookieSecure 决定 refresh cookie 要不要加 Secure 属性。
+//
+// 显式配置优先；没配就跟随 APP_ENV（生产为 true）。
+// 想在 production 下用纯 HTTP 访问时把它设成 "false"。
+func (c *Config) IsCookieSecure() bool {
+	switch strings.ToLower(strings.TrimSpace(c.CookieSecure)) {
+	case "true", "1", "yes":
+		return true
+	case "false", "0", "no":
+		return false
+	default:
+		return c.IsProduction()
+	}
 }
 
 // Load 读取 .env（可选）并解析环境变量到 Config。

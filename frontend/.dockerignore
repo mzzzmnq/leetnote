@@ -1,0 +1,26 @@
+# 构建上下文里不需要的东西。
+#
+# 【最关键的是 node_modules】几百 MB，而且里面有平台相关的原生模块
+# （比如 rollup / esbuild 的二进制）。Linux 容器里用不了 Windows 装的那份，
+# 必须让容器自己 `npm ci`。
+
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+
+# 密钥与本地配置
+.env
+.env.local
+.env.*.local
+local.config.ps1
+
+# 版本控制与编辑器
+.git/
+.gitignore
+.idea/
+.vscode/
+*.swp
+
+# 文档
+*.md

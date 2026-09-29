@@ -28,13 +28,22 @@ param(
 $ErrorActionPreference = 'Stop'
 
 # ---------- 环境自检 ----------
-$goCmd = Get-Command go -ErrorAction SilentlyContinue
+# 路径由项目根目录的 scripts/local-paths.ps1 统一探测（自动找 PATH，
+# 也可以用 local.config.ps1 覆盖），不再写死 D:\dev\go 这类路径。
+. (Join-Path (Split-Path -Parent $PSScriptRoot) 'scripts\local-paths.ps1')
+
+$goCmd = $null
+try { $goCmd = Get-LeetNoteGoExe } catch { $goCmd = $null }
+
 if (-not $goCmd) {
     Write-Host '[错误] 找不到 go 命令。' -ForegroundColor Red
-    Write-Host '       Go 装在 D:\dev\go。请先重启终端让环境变量生效，'
-    Write-Host '       或在当前窗口临时执行： $env:Path = "D:\dev\go\bin;" + $env:Path'
+    Write-Host '       请安装 Go 并把它加入 PATH，'
+    Write-Host '       或复制 local.config.example.ps1 为 local.config.ps1 指定 $LeetNoteGoExe。'
     exit 1
 }
+
+# 后面统一用 $goCmd 调用，避免 PATH 没生效时找不到
+$Go = $goCmd
 
 # 国内网络必须走代理，否则拉依赖会连 proxy.golang.org 超时
 if (-not $env:GOPROXY) { $env:GOPROXY = 'https://goproxy.cn,direct' }
@@ -67,57 +76,58 @@ function Invoke-Step {
 
 switch ($Task) {
     'run' {
-        Invoke-Step 'run' { go run ./cmd/server }
+        Invoke-Step 'run' { & $Go run ./cmd/server }
     }
     'build' {
         New-Item -ItemType Directory -Force -Path bin | Out-Null
-        Invoke-Step 'build' { go build -ldflags $ldflags -o bin/leetnote-api.exe ./cmd/server }
+        Invoke-Step 'build' { & $Go build -ldflags $ldflags -o bin/leetnote-api.exe ./cmd/server }
         Write-Host "已生成 bin/leetnote-api.exe  (version=$version commit=$commit)" -ForegroundColor Green
     }
     'test' {
-        Invoke-Step 'test' { go test ./... -race -cover }
+        Invoke-Step 'test' { & $Go test ./... -race -cover }
     }
     'cover' {
-        Invoke-Step 'cover' { go test ./... -coverprofile=coverage.out }
-        go tool cover -html coverage.out
+        Invoke-Step 'cover' { & $Go test ./... -coverprofile=coverage.out }
+        & $Go tool cover -html coverage.out
     }
     'fmt' {
-        Invoke-Step 'fmt' { go fmt ./... }
-        Invoke-Step 'tidy' { go mod tidy }
+        Invoke-Step 'fmt' { & $Go fmt ./... }
+        Invoke-Step 'tidy' { & $Go mod tidy }
     }
     'tidy' {
-        Invoke-Step 'tidy' { go mod tidy }
+        Invoke-Step 'tidy' { & $Go mod tidy }
     }
     'lint' {
         Invoke-Step 'lint' { golangci-lint run ./... }
     }
     'db-init' {
-        # 装扩展需要超级用户，所以这里用 postgres 账号连。
+        # 装扩展需要超级用户（pgvector 不是 trusted 扩展）。
         # 不放在 migrations/ 里的原因见 scripts/init-extensions.sql 的注释。
-        $pgUser = if ($env:PG_SUPERUSER) { $env:PG_SUPERUSER } else { 'postgres' }
-        $pgPass = if ($env:PG_SUPERPASS) { $env:PG_SUPERPASS } else { 'postgres' }
-        $env:PGPASSWORD = $pgPass
+        $psql = Get-LeetNotePsql
+        Set-LeetNotePgPassword -SuperUser
+
         Invoke-Step 'db-init' {
-            psql -U $pgUser -h localhost -d leetnote -f scripts/init-extensions.sql
+            & $psql -U $LeetNoteDbSuperUser -h $LeetNoteDbHost -p $LeetNoteDbPort `
+                -d $LeetNoteDbName -f scripts/init-extensions.sql
         }
         Write-Host '扩展已就绪，现在可以执行 .\dev.ps1 migrate-up' -ForegroundColor Green
     }
     'migrate-up' {
         # 用 `go run` 调项目自带的迁移子命令，而不是要求先装 golang-migrate CLI：
         # 换台机器只要有 Go 就能跑，少一个「clone 下来跑不起来」的坎。
-        Invoke-Step 'migrate-up' { go run ./cmd/migrate up }
+        Invoke-Step 'migrate-up' { & $Go run ./cmd/migrate up }
     }
     'migrate-down' {
-        Invoke-Step 'migrate-down' { go run ./cmd/migrate down $Steps }
+        Invoke-Step 'migrate-down' { & $Go run ./cmd/migrate down $Steps }
     }
     'migrate-version' {
-        Invoke-Step 'migrate-version' { go run ./cmd/migrate version }
+        Invoke-Step 'migrate-version' { & $Go run ./cmd/migrate version }
     }
     'migrate-force' {
         if ($DbVersion -lt 0) {
             Write-Host '[错误] migrate-force 需要 -DbVersion 参数，例如 .\dev.ps1 migrate-force -DbVersion 6' -ForegroundColor Red
             exit 1
         }
-        Invoke-Step 'migrate-force' { go run ./cmd/migrate force $DbVersion }
+        Invoke-Step 'migrate-force' { & $Go run ./cmd/migrate force $DbVersion }
     }
 }

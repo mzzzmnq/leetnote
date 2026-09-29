@@ -37,6 +37,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 . "$PSScriptRoot\scripts\services.ps1"
+. "$PSScriptRoot\scripts\postgres.ps1"
 
 New-Item -ItemType Directory -Force -Path $LeetNoteLogDir | Out-Null
 
@@ -75,19 +76,13 @@ function Wait-LeetNotePort {
 if (Should-Run 'db') {
     $svc = (Get-LeetNoteServices | Where-Object Key -eq 'db')
 
-    if (Test-LeetNotePort -Port $svc.Port) {
+    if (Test-LeetNotePostgresReady) {
         Write-Host ("  ✅ {0,-11} :{1}（已在运行）" -f $svc.Name, $svc.Port) -ForegroundColor Green
     }
     else {
-        # 便携版 PostgreSQL 有自己的启动脚本（含残留 pid 清理、进程上下文处理）
-        $starter = 'D:\dev\pg-start.ps1'
-        if (Test-Path $starter) {
-            & $starter *> $null
-            Wait-LeetNotePort -Port $svc.Port -Name $svc.Name | Out-Null
-        }
-        else {
-            Write-Host "  ⚠️  找不到 $starter，请手工启动 PostgreSQL" -ForegroundColor Yellow
-        }
+        # 启停逻辑在 scripts/postgres.ps1 里（自包含，不依赖仓库外的脚本）
+        Start-LeetNotePostgres | Out-Null
+        Wait-LeetNotePort -Port $svc.Port -Name $svc.Name | Out-Null
     }
 }
 
@@ -106,7 +101,7 @@ if (Should-Run 'api') {
             Write-Info '  🔨 首次运行，正在构建 Go 服务...'
             if (-not $env:GOPROXY) { $env:GOPROXY = 'https://goproxy.cn,direct' }
             Push-Location $apiDir
-            try { go build -o bin/leetnote-api.exe ./cmd/server }
+            try { & (Get-LeetNoteGoExe) build -o bin/leetnote-api.exe ./cmd/server }
             finally { Pop-Location }
         }
 

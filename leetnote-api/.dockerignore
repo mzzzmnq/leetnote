@@ -1,0 +1,38 @@
+# 构建时不需要进镜像的东西。
+#
+# 【为什么要这个文件】没有它，`docker build` 会把整个目录（含 bin/ 里的
+# 旧二进制、本地 .env、.git）都发给 Docker daemon 当构建上下文，
+# 既慢又可能把密钥带进镜像层。
+#
+# 注意：.dockerignore 的语法和 .gitignore 类似，但**是独立的文件** ——
+# 改 .gitignore 不会影响 Docker。
+
+# 本地构建产物（镜像里会重新编译）
+bin/
+*.exe
+
+# 密钥：绝不能进镜像层（即使后续删掉，中间层里仍然能捞出来）
+.env
+.env.*
+!.env.example
+
+# 版本控制与编辑器
+.git/
+.gitignore
+.idea/
+.vscode/
+*.swp
+
+# 本地配置与备份
+local.config.ps1
+backups/
+
+# 文档与脚本（运行镜像不需要）
+*.md
+dev.ps1
+scripts/
+
+# 测试与覆盖率
+*_test.go
+coverage.out
+coverage.html

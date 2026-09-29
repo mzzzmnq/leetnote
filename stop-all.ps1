@@ -19,6 +19,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 . "$PSScriptRoot\scripts\services.ps1"
+. "$PSScriptRoot\scripts\postgres.ps1"
 
 # 停止顺序：先停应用，最后停数据库（应用可能还在写库）
 $stopOrder = @('web', 'ai', 'api', 'db')
@@ -45,12 +46,9 @@ foreach ($key in $stopOrder) {
 
     # PostgreSQL 用 pg_ctl 停才干净（直接杀进程下次启动可能要恢复）
     if ($key -eq 'db') {
-        $pgStop = 'D:\dev\pg-stop.ps1'
-        if (Test-Path $pgStop) {
-            & $pgStop *> $null
-            Write-Host ("  ✅ {0,-11} :{1}" -f $svc.Name, $svc.Port) -ForegroundColor Green
-            continue
-        }
+        Stop-LeetNotePostgres | Out-Null
+        Write-Host ("  ✅ {0,-11} :{1}" -f $svc.Name, $svc.Port) -ForegroundColor Green
+        continue
     }
 
     Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue

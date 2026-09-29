@@ -1,0 +1,176 @@
+# =============================================================
+# LeetNote · 完整栈（Docker Compose）
+# =============================================================
+#
+# 用法：
+#     cd deploy
+#     cp .env.example .env       # 第一次：填好密钥
+#     docker compose up -d --build
+#     # 浏览器打开 http://localhost
+#
+# 停止：docker compose down          （保留数据）
+# 清空：docker compose down -v       （⚠️ 连数据库卷一起删）
+#
+# ---------------------------------------------------------------
+# 【为什么不把数据库端口暴露到宿主机】
+#
+# 下面 db 服务刻意没有 ports: 映射。它只在 compose 自动创建的网络里可达，
+# 由 api / ai 通过服务名 `db` 访问。
+#
+# 暴露 5432 到宿主机意味着局域网里任何人都能尝试连你的库。
+# 本地开发确实需要直连时，用 docker-compose.dev.yml 那个单独起库的方案。
+#
+# ---------------------------------------------------------------
+# 【服务名即 DNS】
+#
+# 容器里写 localhost 指的是**容器自己**，不是宿主机，也不是别的容器。
+# compose 会把服务名（db / api / ai / web）注册进内置 DNS，
+# 所以 api 连数据库要写 @db:5432 而不是 @localhost:5432。
+# 这是容器化最容易踩的第一个坑。
+# =============================================================
+
+name: leetnote
+
+services:
+
+  # -------------------------------------------------------------
+  # PostgreSQL（带 pgvector）
+  # -------------------------------------------------------------
+  db:
+    image: pgvector/pgvector:pg18
+    environment:
+      POSTGRES_USER: leetnote
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?请在 deploy/.env 里设置 DB_PASSWORD}
+      POSTGRES_DB: leetnote
+        # 初始化时用的编码与排序规则。中文排序要用 C 或明确的 collation，
+        # 默认的 en_US.UTF-8 在某些镜像里会让中文排序结果很意外。
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      # 数据卷：容器的可写层是临时的，删容器就没了，
+      # 数据库文件必须放在卷里才能活过 down / up。
+      - pgdata:/var/lib/postgresql/data
+      # 首次初始化时自动执行（装扩展，需要超级用户）
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # 让 api / ai 等它真的能接受查询再启动，而不是"端口开了"就冲进去
+      test: ["CMD-SHELL", "pg_isready -U leetnote -d leetnote"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  # -------------------------------------------------------------
+  # 数据库迁移（一次性任务）
+  # -------------------------------------------------------------
+  # 复用 api 的镜像，只是换个 entrypoint。迁移完就退出，
+  # api 通过 service_completed_successfully 等它成功后才启动。
+  migrate:
+    build:
+      context: ../leetnote-api
+    entrypoint: ["/app/migrate"]
+    command: ["up"]
+    environment:
+      DATABASE_URL: postgres://leetnote:${DB_PASSWORD}@db:5432/leetnote?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET:?请在 deploy/.env 里设置 JWT_SECRET}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  # -------------------------------------------------------------
+  # Go 主服务
+  # -------------------------------------------------------------
+  api:
+    build:
+      context: ../leetnote-api
+    environment:
+      APP_ENV: production
+
+      # 【重要】纯 HTTP 访问时必须设 false。
+      # 否则 cookie 会带 Secure 属性，浏览器在 http:// 下拒绝存储，
+      # 表现为「登录接口返回 200，但刷新页面就掉登录」。
+      # 上了 HTTPS 后改成 true。
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+
+      DATABASE_URL: postgres://leetnote:${DB_PASSWORD}@db:5432/leetnote?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET}
+      ACCESS_TOKEN_TTL: 15m
+      REFRESH_TOKEN_TTL: 168h
+
+      # 同源访问（nginx 反代），CORS 其实用不上；
+      # 留一个值是为了直接用 IP+端口访问 API 调试时能用
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost}
+
+      # 走容器内网，不是 127.0.0.1
+      AI_SERVICE_URL: http://ai:8000
+      AI_INTERNAL_TOKEN: ${AI_INTERNAL_TOKEN:?请在 deploy/.env 里设置 AI_INTERNAL_TOKEN}
+
+      # OAuth 回调后跳回前端
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
+
+      # GitHub OAuth（留空即关闭该登录方式）
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      GITHUB_REDIRECT_URL: ${GITHUB_REDIRECT_URL:-http://localhost/api/v1/auth/github/callback}
+    depends_on:
+      db:
+        condition: service_healthy
+      # 迁移成功后才启动，避免表还没建好就开始服务请求
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # -------------------------------------------------------------
+  # Python AI 服务
+  # -------------------------------------------------------------
+  # 不暴露端口 —— 只有 api 通过内网调它，
+  # 靠 INTERNAL_API_TOKEN 拒绝任何非本服务的请求。
+  ai:
+    build:
+      context: ../leetnote-ai
+    environment:
+      APP_ENV: production
+      HTTP_PORT: 8000
+
+      # 注意 psycopg 用的是 postgresql:// 前缀（不是 postgres://）
+      DATABASE_URL: postgresql://leetnote:${DB_PASSWORD}@db:5432/leetnote
+
+      INTERNAL_API_TOKEN: ${AI_INTERNAL_TOKEN}
+
+      # Embedding：留空则用内置的本地哈希向量器（不需要外部服务）
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-1536}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.siliconflow.cn/v1}
+
+      # 对话模型（AI 讲解）
+      CHAT_API_KEY: ${CHAT_API_KEY:-}
+      CHAT_BASE_URL: ${CHAT_BASE_URL:-}
+      CHAT_MODEL: ${CHAT_MODEL:-}
+      CHAT_USER_AGENT: ${CHAT_USER_AGENT:-leetnote-ai/0.1.0}
+      CHAT_SESSION_HEADER: ${CHAT_SESSION_HEADER:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # -------------------------------------------------------------
+  # 前端 + Nginx（唯一对宿主机暴露端口的服务）
+  # -------------------------------------------------------------
+  web:
+    build:
+      context: ../frontend
+      args:
+        # 编译期内联进产物。用相对路径 → 同源 → 没有 CORS 和跨域 cookie 问题
+        VITE_API_BASE_URL: /api/v1
+    ports:
+      - "${WEB_PORT:-80}:80"
+    depends_on:
+      api:
+        condition: service_started
+    restart: unless-stopped
+
+# 数据库卷。`docker compose down` 不会删它，`down -v` 才会。
+volumes:
+  pgdata:

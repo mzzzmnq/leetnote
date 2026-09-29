@@ -1,0 +1,54 @@
+# =============================================================
+# leetnote-ai dependencies
+# =============================================================
+#
+# Install:
+#     python -m venv .venv
+#     .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+#
+# IMPORTANT: create the venv with the OFFICIAL Python, not Anaconda's.
+# Anaconda ships an incompatible OpenSSL build, which makes every HTTPS
+# request fail (it shows up as "pip cannot find any package").
+# See docs/ENVIRONMENT.md.
+#
+# NOTE: this file is intentionally ASCII-only.
+# pip decodes requirements.txt using the OS locale encoding (GBK on a
+# Chinese Windows), so non-ASCII comments make it fail with
+#     UnicodeDecodeError: 'gbk' codec can't decode byte ...
+# The Chinese explanation of these pinned versions lives in
+# docs/DEPLOY.md instead of here.
+#
+# Pinning exact versions (no ^ or ~) on purpose: this service depends on
+# runtime semantics such as vector dimensions, SQL dialect and event-loop
+# behaviour. Loose ranges let a patch release change behaviour silently.
+# To upgrade:
+#     .\.venv\Scripts\python.exe -m pip install -U <pkg>
+#     .\.venv\Scripts\python.exe -m pip freeze > requirements.txt
+# =============================================================
+
+# ---------- web framework ----------
+fastapi==0.141.1
+uvicorn==0.53.0
+httptools==0.8.0
+watchfiles==1.2.0
+websockets==17.1
+
+# ---------- database (psycopg 3 async) ----------
+# the "binary" extra ships libpq, so no PostgreSQL dev package needed
+psycopg[binary,pool]==3.3.6
+psycopg-binary==3.3.6
+psycopg-pool==3.3.2
+
+# ---------- HTTP client (LLM calls) ----------
+httpx==0.28.1
+
+# ---------- config and vector math ----------
+pydantic-settings==2.15.0
+numpy==2.4.6
+
+# ---------- misc ----------
+PyYAML==6.0.3
+
+# ---------- tests ----------
+pytest==9.1.1
+pytest-asyncio==1.4.0

@@ -266,6 +266,27 @@ Windows 下**双击项目根目录的 `LeetNote.bat`** 即可，会出现一个�
 服务清单是**单一事实来源**（`scripts/services.ps1`），端口和名称只写一遍——
 以后加 Redis 之类的服务，改一个文件就行。
 
+### 换机器 / 用 Docker
+
+**搬到另一台电脑**（含数据搬迁、排错表）见 **[docs/DEPLOY.md](docs/DEPLOY.md)**。
+新机器上一条命令完成初始化：
+
+```powershell
+.\setup.ps1                      # 检查工具 → 生成 .env → 装依赖 → 建库 → 迁移 → 编译
+.\migrate-data.ps1 import -File xxx.dump   # 可选：把旧机器的数据搬过来
+```
+
+**Docker 方式**（机器上只需要装 Docker Desktop）：
+
+```powershell
+cd deploy
+Copy-Item .env.example .env      # 改三个密钥
+docker compose up -d --build     # 打开 http://localhost
+```
+
+只有 `web`（nginx:80）暴露到宿主机，`/api` 走同源反向代理 ——
+所以没有 CORS，也没有跨域 cookie 的问题。
+
 ### 前置要求
 
 | 组件 | 版本 |
@@ -365,9 +386,19 @@ go run ./cmd/importer -file lingshen-tidan.md -ratings-file D:\dev\_downloads\ra
 leetnote/
 ├── LeetNote.bat                     # ★ 双击入口：打开启动器菜单
 ├── launcher.ps1                     #   启动器（交互式菜单）
+├── setup.ps1                        #   ★ 新机器一键初始化
+├── migrate-data.ps1                 #   数据库导出 / 导入（换机器搬数据）
 ├── start-all.ps1 / stop-all.ps1 / status.ps1
+├── local.config.example.ps1         #   本机路径覆盖模板（复制为 local.config.ps1）
 ├── scripts/
-│   └── services.ps1                 #   服务清单（端口/名称的单一事实来源）
+│   ├── services.ps1                 #   服务清单（端口/名称的单一事实来源）
+│   ├── local-paths.ps1              #   工具路径自动探测（不写死 D:\dev\...）
+│   └── postgres.ps1                 #   PostgreSQL 启停（自包含）
+├── deploy/                          # ★ Docker 部署
+│   ├── docker-compose.yml           #   完整栈（5 服务，只暴露 web）
+│   ├── docker-compose.dev.yml       #   只起数据库（本地开发用）
+│   ├── initdb/01-extensions.sql     #   首次初始化时装扩展（需超级用户）
+│   └── .env.example
 │
 ├── leetnote-api/                    # Go 主服务
 │   ├── cmd/
@@ -470,6 +501,9 @@ leetnote/
 | **测试不能只删用户** | `problems`/`tags` 是全局表，不随用户级联删除。集成测试曾经只清理测试用户，导致每跑一次就往题目库里塞一条重复的「Two Sum」 |
 | **枚举值要归一化 + 收敛** | 语言的合法值只在小写规范形式上定义，`Golang`/`js`/`C++` 在入口统一归一化；再收敛到 7 种 —— 否则按语言分组时同一门语言会被拆成好几组，事后极难清洗 |
 | **两条写入路径必须都改** | 解法有「单独接口」和「保存笔记时整批替换」两条写入路径。归一化抽成一个函数，两条都走它，避免只改一条的经典漏网 |
+| **项目不能依赖仓库外的文件** | 启动脚本曾写死 `D:\dev\pg-start.ps1`——换机器直接失效。改成自动探测 + 可覆盖，把 PostgreSQL 启停内联进仓库 |
+| **容器里的 localhost 不是宿主机** | 每个容器有独立网络命名空间；连数据库要写服务名 `db`，这是容器化第一个坑 |
+| **`Secure` cookie 不能用「是否生产环境」判断** | 它只取决于**当前是否走 HTTPS**。混在一起会导致 Docker 里 `http://localhost` 登录成功但一刷新就掉登录 |
 | **换肤只切一个类名** | 颜色全走 CSS 变量，`<html>` 上加一个 `.dark` 就完成整站换肤；组件里零硬编码颜色 |
 | **暗色不用纯白** | 纯白配深底会"发光"，正文用 `#e6edf3`（14.6:1）——对比度足够但柔和不刺眼 |
 | **主色分两个 token** | `--ln-primary` 给按钮底色，`--ln-primary-text` 给文字。同一个蓝色当文字放在浅色底上只有 4.05:1，不达标 |

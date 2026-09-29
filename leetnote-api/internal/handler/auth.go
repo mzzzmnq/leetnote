@@ -123,7 +123,7 @@ func setRefreshCookie(c *gin.Context, cfg *config.Config, pair *jwt.TokenPair) {
 		Path:     refreshCookiePath,
 		MaxAge:   int(time.Until(pair.RefreshExpiresAt).Seconds()),
 		HttpOnly: true,
-		Secure:   cfg.IsProduction(),
+		Secure:   cfg.IsCookieSecure(),
 		SameSite: http.SameSiteLaxMode,
 	})
 }
@@ -135,7 +135,7 @@ func clearRefreshCookie(c *gin.Context, cfg *config.Config) {
 		Path:     refreshCookiePath,
 		MaxAge:   -1, // 负数表示立即删除
 		HttpOnly: true,
-		Secure:   cfg.IsProduction(),
+		Secure:   cfg.IsCookieSecure(),
 		SameSite: http.SameSiteLaxMode,
 	})
 }

@@ -3,6 +3,16 @@
 .env.local
 *.env.local
 
+# ---------- 本机配置（每台机器不同，不入库）----------
+# local.config.ps1 里放的是本机的工具路径与数据库连接参数，
+# 模板见 local.config.example.ps1
+local.config.ps1
+
+# ---------- 数据备份 ----------
+# migrate-data.ps1 导出的数据库快照
+backups/
+*.dump
+
 # ---------- Go ----------
 leetnote-api/bin/
 *.exe

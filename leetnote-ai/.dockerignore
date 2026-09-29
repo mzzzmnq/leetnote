@@ -1,0 +1,35 @@
+# 构建上下文里不需要的东西。
+#
+# 【最关键的是 .venv】它可能有几百 MB，而且内部的路径是**宿主机**上的
+# 绝对路径，容器里根本用不了。不排除掉的话：
+#   * 构建上下文巨大，每次 build 都要传给 daemon
+#   * .venv 里那份 python 会被 COPY 进镜像，覆盖掉容器自己的
+
+# 虚拟环境（容器里自己装）
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 密钥
+.env
+.env.*
+!.env.example
+
+# 版本控制与编辑器
+.git/
+.gitignore
+.idea/
+.vscode/
+*.swp
+
+# 本机配置与备份
+local.config.ps1
+backups/
+
+# 测试与文档
+tests/
+*.md

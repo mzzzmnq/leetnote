@@ -1,0 +1,52 @@
+# =============================================================
+# LeetNote · 只起数据库（本地开发用）
+# =============================================================
+#
+# 用途：Go / Python / 前端都在宿主机上直接跑（享受热重载），
+#      只有 PostgreSQL 用容器起 —— 省掉在本机装 PostgreSQL + pgvector
+#      这一步（pgvector 在 Windows 上要自己编译，挺折腾）。
+#
+# 用法：
+#     cd deploy
+#     docker compose -f docker-compose.dev.yml up -d
+#
+# 这个版本**会**把 5432 暴露到宿主机，因为宿主机上的服务要连它。
+# 生产用的 docker-compose.yml 则刻意不暴露。
+#
+# 连上之后，直接把 leetnote-api/.env 里的 DATABASE_URL 指向它即可：
+#     postgres://leetnote:leetnote@localhost:5432/leetnote?sslmode=disable
+#
+# 首次起库后别忘了建表：
+#     cd ..\leetnote-api
+#     .\dev.ps1 db-init      # 装扩展（容器里的 postgres 账号）
+#     .\dev.ps1 migrate-up   # 建表
+#
+# 【注意】initdb 那个卷第一次起的时候会自动装扩展。
+# 如果你想手工控制，把下面 01-extensions.sql 的挂载去掉即可。
+# =============================================================
+
+name: leetnote-dev
+
+services:
+  db:
+    image: pgvector/pgvector:pg18
+    environment:
+      POSTGRES_USER: leetnote
+      POSTGRES_PASSWORD: leetnote
+      POSTGRES_DB: leetnote
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata-dev:/var/lib/postgresql/data
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U leetnote -d leetnote"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  pgdata-dev:

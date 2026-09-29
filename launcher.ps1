@@ -100,7 +100,6 @@ function Show-Dashboard {
 
     $status = Get-LeetNoteStatus -SkipHealthCheck:$SkipHealth
     $running = 0
-
     Write-Host ('  ' + (Format-Pad '服务' 14) + (Format-Pad '端口' 8) + (Format-Pad '状态' 26) + 'PID') -ForegroundColor DarkGray
     Write-Host ('  ' + ('·' * 56)) -ForegroundColor DarkGray
 
@@ -129,6 +128,17 @@ function Show-Dashboard {
     else {
         Write-Host "  $running / $($status.Count) 个服务在运行" -ForegroundColor Yellow
     }
+
+    # 新机器上最容易卡住的是「工具没装 / 不在 PATH」，直接把探测结果摆出来
+    $toolchain = Get-LeetNoteToolchainStatus
+    if (-not $toolchain.HasGo -or -not $toolchain.HasPg) {
+        Write-Host ''
+        Write-Host '  ⚠️  工具链不完整：' -ForegroundColor Yellow
+        if (-not $toolchain.HasGo) { Write-Host '       找不到 Go —— 请安装并加入 PATH' -ForegroundColor Yellow }
+        if (-not $toolchain.HasPg) { Write-Host '       找不到 PostgreSQL —— 请安装并加入 PATH' -ForegroundColor Yellow }
+        Write-Host '       也可以复制 local.config.example.ps1 为 local.config.ps1 手工指定路径' -ForegroundColor DarkGray
+    }
+
     Write-Host ''
 }
 
@@ -211,7 +221,8 @@ function Invoke-ViewLog {
     }
 
     $path = Get-LeetNoteLogPath -Key $key
-    if ($key -eq 'db') { $path = 'D:\dev\pgsql\server.log' }
+    # 数据库的日志不在 %TEMP%，而是 PostgreSQL 自己的数据目录下
+    if ($key -eq 'db' -and $LeetNotePgData) { $path = Join-Path $LeetNotePgData 'server.log' }
 
     if (-not (Test-Path $path)) {
         Write-Host ''

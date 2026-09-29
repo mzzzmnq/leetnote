@@ -16,6 +16,9 @@ $ErrorActionPreference = 'Stop'
 # 项目根目录（本文件在 <root>\scripts\ 下）
 $LeetNoteRoot = Split-Path -Parent $PSScriptRoot
 
+# 本机工具路径与数据库连接参数（自动探测 + local.config.ps1 覆盖）
+. "$PSScriptRoot\local-paths.ps1"
+
 # 日志目录：所有服务的 stdout/stderr 都落在这里
 $LeetNoteLogDir = Join-Path $env:TEMP 'leetnote-logs'
 
