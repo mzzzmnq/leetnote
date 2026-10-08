@@ -138,6 +138,15 @@ $env:LEETNOTE_GO_EXE = $LeetNoteGoExe
 $env:LEETNOTE_PG_BIN = $LeetNotePgBin
 $env:LEETNOTE_PGDATA = $LeetNotePgData
 
+# setup.ps1 用 $env:LEETNOTE_DB_* 拼 DATABASE_URL，这里必须一并导出。
+# 漏了这几个会让生成的连接串变成 postgres://:@:/...（用户/库全空），
+# 迁移时会退化成用 Windows 用户名去连，报 password authentication failed。
+$env:LEETNOTE_DB_NAME = $LeetNoteDbName
+$env:LEETNOTE_DB_USER = $LeetNoteDbUser
+$env:LEETNOTE_DB_PASS = $LeetNoteDbPass
+$env:LEETNOTE_DB_HOST = $LeetNoteDbHost
+$env:LEETNOTE_DB_PORT = $LeetNoteDbPort
+
 # ---------------------------------------------------------------
 # 6. 供其它脚本调用的辅助函数
 # ---------------------------------------------------------------
