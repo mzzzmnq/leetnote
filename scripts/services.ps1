@@ -46,7 +46,11 @@ function Get-LeetNoteServices {
         }
         [pscustomobject]@{
             Key = 'web'; Name = '前端'; Port = 5173; Desc = 'Vue 3 开发服务器'
-            Health = 'http://127.0.0.1:5173/'
+            # 用 localhost 而不是 127.0.0.1：Vite 默认绑到 localhost，
+            # 在 IPv6 优先的机器上会只绑 ::1，此时用 IPv4 字面量 127.0.0.1 探测必然失败
+            # （表现为「端口在监听但请求失败」，start-all 会一直等）。
+            # 主机名 localhost 会同时尝试 ::1 / 127.0.0.1，两种绑定都能连上。
+            Health = 'http://localhost:5173/'
         }
     )
 }
