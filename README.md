@@ -639,6 +639,8 @@ leetnote/
 
 | 文档 | 内容 |
 |---|---|
+| [`AGENTS.md`](AGENTS.md) | **给 AI 助手与新协作者的项目上下文**：怎么跑、怎么验证、硬性约定、已知的坑、当前进度。**开工前先读这个** |
+| [`docs/DEPLOY.md`](docs/DEPLOY.md) | **换机器 / 部署**：原生与 Docker 两条路线的完整步骤、数据搬迁、排错表 |
 | [`docs/DESIGN.md`](docs/DESIGN.md) | 完整设计方案：11 张表的 DDL 与设计决策、40 个接口契约、gRPC 契约、架构说明 |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | **12 个月求职学习路线**：逐周任务、里程碑验收、风险应对 |
 | [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md) | 环境搭建全过程与踩坑记录（Go / PostgreSQL / pgvector / Python） |
