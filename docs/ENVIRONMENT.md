@@ -567,3 +567,95 @@ leetnote-api/
 测试覆盖率 router 96.7% / errs 93.3% / response 93.3%。
 
 **下一步 M2**：认证模块（bcrypt + JWT 双 Token + 鉴权中间件 + 4 个接口）。
+
+---
+
+## 11. 在另一台机器上复现时的补充踩坑（2026-10）
+
+以下 4 个问题是在**换一台机器从零跑通**时遇到的，按踩到的顺序记录。
+前两个是**环境/工具**层面的，后两个已经修进仓库。
+
+### 11.1 PowerShell 版本：必须用 PowerShell 7，不能用 5.1
+
+仓库里所有 `.ps1` 都是 **UTF-8 无 BOM**。中文 Windows 的系统 ANSI 码页（ACP）是 **936（GBK）**，
+而 **Windows PowerShell 5.1 读取无 BOM 的脚本时按 ACP 解析** → 中文注释和 emoji 会把字符串引号撑破：
+
+```
+字符串缺少终止符: '。
+    + CategoryInfo : ParserError: ...
+```
+
+表现是整个 `setup.ps1` 连解析都过不了，任何一行都执行不到。
+
+**为什么另一台机器没事**：项目本来就期望 **PowerShell 7** —— `LeetNote.bat` 里明确先找
+`%ProgramFiles%\PowerShell\7\pwsh.exe`，找不到才 `where pwsh`，最后才回退 5.1（并注释了
+"5.1 可能渲染 CJK 更脏"）。
+
+**判断本机会不会踩**：
+
+```powershell
+(Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Nls\CodePage').ACP   # 936 就有风险
+Get-Command pwsh -ErrorAction SilentlyContinue                                 # 有 pwsh 就没事
+```
+
+**处理**：装 PowerShell 7（便携 zip 解压后加进 PATH 即可），用 `pwsh` 跑脚本：
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1
+```
+
+### 11.2 npm 的 PowerShell shim 会把参数截错
+
+Node 自带的 `npm.ps1` 在 **`& npm <子命令>`**（带调用运算符）这种写法下会算错参数：
+
+- 它用 `$MyInvocation.Statement` 去掉 `$MyInvocation.InvocationName.Length` 来还原参数；
+- 语句是 `& npm install`，`InvocationName` 却是 `npm`，长度对不上 →
+  切出 `"pm install"`，npm 报 `Unknown command: "pm"`。
+
+`setup.ps1` 正好用的是 `& npm install`，于是第 3 步就挂。
+
+**处理**：把 Node 目录里的 `npm.ps1` / `npx.ps1` 改名，让 PowerShell 回落到 `npm.cmd`
+（cmd shim 用 `%*` 传参，没有这个问题）：
+
+```powershell
+Rename-Item D:\Apps\nodejs\npm.ps1 npm.ps1.disabled
+Rename-Item D:\Apps\nodejs\npx.ps1 npx.ps1.disabled
+```
+
+### 11.3 Vite 只绑 IPv6，健康检查不能用 127.0.0.1（已修）
+
+`frontend/vite.config.ts` 没设 `server.host`，Vite 默认绑 `localhost`；在 **IPv6 优先**的机器上
+会解析成 `::1` 并**只监听 IPv6**：
+
+```
+LocalAddress   LocalPort   OwningProcess
+::1            5173        10480
+```
+
+此时 `scripts/services.ps1` 里原本写死的 `http://127.0.0.1:5173/` 探测必然失败
+（端口在监听，但 IPv4 连不上），`start-all.ps1` 会一直等前端"就绪"直到超时。
+浏览器开 `http://localhost:5173` 反而是好的（解析到 `::1`）。
+
+**修复**：前端健康检查改用 `http://localhost:5173/` —— 主机名会同时尝试 `::1` / `127.0.0.1`，
+两种绑定都能连上；而且和 README 里宣传的地址一致。
+
+### 11.4 setup 生成的 DATABASE_URL 是空的（已修）
+
+`setup.ps1` 用 `$env:LEETNOTE_DB_USER` 等拼 `DATABASE_URL`，但 `scripts/local-paths.ps1`
+只导出了 `LEETNOTE_GO_EXE` / `LEETNOTE_PG_BIN` / `LEETNOTE_PGDATA`，**从没导出过 `LEETNOTE_DB_*`**。
+结果生成的连接串是：
+
+```
+DATABASE_URL=postgres://:@:/?sslmode=disable
+```
+
+迁移时用户名/库名全空，pgx 退化成用 **Windows 用户名**去连：
+
+```
+failed to open database: pq: password authentication failed for user "Administrator"
+```
+
+另一台机器上多半残留了这几个环境变量，把这个 bug 掩盖了。
+
+**修复**：`local-paths.ps1` 里补上 `LEETNOTE_DB_NAME/USER/PASS/HOST/PORT` 的导出。
+改完要**先删掉已生成的 `.env`** 再重跑 `setup.ps1`（它幂等，已存在的 `.env` 会跳过）。
