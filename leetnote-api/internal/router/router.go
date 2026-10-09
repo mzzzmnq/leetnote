@@ -43,6 +43,7 @@ func New(cfg *config.Config, pool *pgxpool.Pool, cacheClient *cache.Client) *gin
 
 	userRepo := repository.NewUserRepository(pool)
 	oauthRepo := repository.NewOAuthRepository(pool)
+	apiTokenRepo := repository.NewAPITokenRepository(pool)
 	problemRepo := repository.NewProblemRepository(pool)
 	tagRepo := repository.NewTagRepository(pool)
 	noteRepo := repository.NewNoteRepository(pool)
@@ -122,7 +123,7 @@ func New(cfg *config.Config, pool *pgxpool.Pool, cacheClient *cache.Client) *gin
 	}
 
 	// 需要登录的接口
-	authed := v1.Group("", middleware.Auth(tokenManager), middleware.RateLimit(cacheClient, rateCfg))
+	authed := v1.Group("", middleware.Auth(tokenManager, apiTokenRepo), middleware.RateLimit(cacheClient, rateCfg))
 	{
 		users := authed.Group("/users")
 		{
@@ -134,6 +135,10 @@ func New(cfg *config.Config, pool *pgxpool.Pool, cacheClient *cache.Client) *gin
 			users.GET("/me/oauth-accounts", oauthHandler.LinkedAccounts)
 			users.DELETE("/me/oauth-accounts/github", oauthHandler.Unlink)
 		}
+
+		// 外部工具导入笔记（openleet 浏览器助手等，用长期令牌鉴权）
+		//   放在 /import/note 而不是 /notes/import：后者会和 /notes/:id/* 抢同一层级路由
+		authed.POST("/import/note", noteHandler.Import)
 
 		// 题目（全局共享的元数据）
 		problems := authed.Group("/problems")

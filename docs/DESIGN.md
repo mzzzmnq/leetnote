@@ -816,6 +816,18 @@ RAISE EXCEPTION
 | DELETE | `/notes/{id}` | 删除 |
 | POST | `/notes/{id}/star` | 切换收藏 |
 
+#### 导入 `/import/note` 🟩
+
+供外部工具（如 openleet 浏览器助手）用**长期令牌**导入笔记：按 `title_slug` 关联已有题目，
+题目不存在则新建；同一用户对同一题已有笔记时**更新**那篇（幂等，不报 409）。
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/import/note` | 导入「一道题 + 代码（+ 可选 AI 讲解）」为一篇笔记 |
+
+> 长期令牌（PAT，`ln_` 前缀）用 `go run ./cmd/token -user <用户名> -name <用途>` 生成，
+> 库里只存 sha256 哈希、可随时吊销；`Auth` 中间件按前缀把 PAT 与 JWT 分流。
+
 #### 解法 `/notes/{note_id}/solutions` 🟦
 
 | 方法 | 路径 | 说明 |

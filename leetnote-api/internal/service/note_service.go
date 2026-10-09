@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sort"
 	"strconv"
@@ -123,6 +124,136 @@ func (s *NoteService) Create(ctx context.Context, userID int64, in dto.NoteInput
 	// 异步建复习卡（幂等）
 	s.ensureReviewCard(noteID)
 	return created, nil
+}
+
+// ImportResult 是导入的结果。
+type ImportResult struct {
+	Note           *model.Note
+	ProblemCreated bool // 题目是否为本次新建
+	NoteCreated    bool // 笔记是否为本次新建（false = 更新了同一题的已有笔记）
+}
+
+// ImportNote 把外部工具（如 openleet 浏览器助手）提交的一道题 + 代码导成一篇笔记。
+//
+// 【为什么复用 Create/Update】导入与站内写入在落库上完全一致（事务、解法、
+// 标签、向量、复习卡），差别只在「题目从哪来」和「字段怎么翻译」。把这两件事
+// 单独处理、其余照走既有路径，就避免了第二条写入路径 —— 那正是 AGENTS.md
+// 提醒过的「两条路径只改一条」的坑。
+//
+// 【幂等】同一用户对同一题（uq_notes_user_problem 保证一题一篇）已有笔记时，
+// 导入会【更新】那篇而不是报 409 —— 插件重复点「保存」应当更新，而不是失败。
+func (s *NoteService) ImportNote(
+	ctx context.Context, userID int64, in dto.ImportNoteInput,
+) (*ImportResult, error) {
+	problemID, problemCreated, err := s.ensureProblem(ctx, in.Problem)
+	if err != nil {
+		return nil, err
+	}
+
+	solutions := make([]dto.SolutionInput, 0, len(in.Solutions))
+	for _, sol := range in.Solutions {
+		title := strings.TrimSpace(sol.Title)
+		if title == "" {
+			// NoteInput 要求解法标题必填；导入方没有这个概念，给个中性默认值。
+			title = "导入的解法"
+		}
+		solutions = append(solutions, dto.SolutionInput{
+			Title:    title,
+			Language: sol.Language,
+			Code:     sol.Code,
+		})
+	}
+
+	content := in.ContentMD
+	if strings.TrimSpace(content) == "" {
+		content = defaultImportContent(in.Problem)
+	}
+
+	noteInput := dto.NoteInput{
+		ProblemID: &problemID,
+		Title:     importNoteTitle(in.Problem),
+		ContentMD: content,
+		Summary:   in.Summary,
+		Status:    model.NoteStatusPublished,
+		Solutions: solutions,
+	}
+
+	// 已经为这道题写过笔记 → 更新它，保证重复导入幂等
+	existing, err := s.notes.GetByProblemID(ctx, userID, problemID)
+	switch {
+	case err == nil:
+		updated, uerr := s.Update(ctx, userID, existing.ID, noteInput)
+		if uerr != nil {
+			return nil, uerr
+		}
+		return &ImportResult{Note: updated, ProblemCreated: problemCreated, NoteCreated: false}, nil
+	case !errs.IsNotFound(err):
+		return nil, err
+	}
+
+	created, err := s.Create(ctx, userID, noteInput)
+	if err != nil {
+		return nil, err
+	}
+	return &ImportResult{Note: created, ProblemCreated: problemCreated, NoteCreated: true}, nil
+}
+
+// ensureProblem 按 slug 复用已有题目；没有则新建。
+//
+// 题单里的 172 道题大多已存在，导入时会命中 GetBySlug 直接复用，
+// 于是「导入」的笔记天然挂到题单题目上 —— 这就是「按 slug 关联」。
+func (s *NoteService) ensureProblem(ctx context.Context, p dto.ImportProblem) (int64, bool, error) {
+	existing, err := s.problems.GetBySlug(ctx, p.TitleSlug)
+	switch {
+	case err == nil:
+		return existing.ID, false, nil
+	case !errs.IsNotFound(err):
+		// 只有「确实没找到」才继续新建；连不上库之类的错误要如实上报
+		return 0, false, err
+	}
+
+	difficulty := p.Difficulty
+	if difficulty == "" {
+		difficulty = model.DifficultyMedium
+	}
+	url := p.URL
+	if url == nil || *url == "" {
+		u := "https://leetcode.cn/problems/" + p.TitleSlug + "/"
+		url = &u
+	}
+
+	problem := &model.Problem{
+		LeetCodeID: p.LeetCodeID,
+		Title:      p.Title,
+		TitleSlug:  p.TitleSlug,
+		Difficulty: difficulty,
+		URL:        url,
+	}
+	if err := s.problems.Create(ctx, problem); err != nil {
+		// 并发下可能刚被另一个请求建出来 —— 撞唯一键时回读一次即可
+		if again, e := s.problems.GetBySlug(ctx, p.TitleSlug); e == nil {
+			return again.ID, false, nil
+		}
+		return 0, false, err
+	}
+	return problem.ID, true, nil
+}
+
+// importNoteTitle 生成笔记标题，优先带题号（便于在列表里一眼定位）。
+func importNoteTitle(p dto.ImportProblem) string {
+	if p.LeetCodeID != nil {
+		return fmt.Sprintf("%d. %s", *p.LeetCodeID, p.Title)
+	}
+	return p.Title
+}
+
+// defaultImportContent 在导入方没给正文时，生成一段带题目链接的占位正文。
+func defaultImportContent(p dto.ImportProblem) string {
+	url := "https://leetcode.cn/problems/" + p.TitleSlug + "/"
+	if p.URL != nil && *p.URL != "" {
+		url = *p.URL
+	}
+	return fmt.Sprintf("> 由浏览器助手导入\n\n题目：[%s](%s)\n", importNoteTitle(p), url)
 }
 
 // GetByID 返回笔记详情（含题目、标签、解法）。

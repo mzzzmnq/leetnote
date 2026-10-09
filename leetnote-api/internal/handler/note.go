@@ -33,6 +33,33 @@ func (h *NoteHandler) Create(c *gin.Context) {
 	response.Created(c, dto.NewNoteResponse(note))
 }
 
+// Import POST /api/v1/import/note
+//
+// 供外部工具（openleet 浏览器助手）用【长期令牌】导入笔记。
+// 与 Create 的差别：题目按 slug 关联或新建，解法标题可省略。
+//
+// 单独放在 /import/note 而不是 /notes/import：gin 的路由树里
+// /notes/import 会和 /notes/:id/* 抢同一个层级的节点，容易冲突。
+func (h *NoteHandler) Import(c *gin.Context) {
+	var in dto.ImportNoteInput
+	if !validator.BindJSON(c, &in) {
+		return
+	}
+
+	result, err := h.svc.ImportNote(c.Request.Context(), middleware.MustUserID(c), in)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	body := dto.NewImportNoteResponse(result.Note, result.ProblemCreated, result.NoteCreated)
+	if result.NoteCreated {
+		response.Created(c, body)
+		return
+	}
+	// 更新已有笔记用 200（已存在资源被更新），而不是 201
+	response.OK(c, body)
+}
+
 // List GET /api/v1/notes
 func (h *NoteHandler) List(c *gin.Context) {
 	var q dto.NoteQuery

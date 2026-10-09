@@ -1,6 +1,7 @@
 package errs
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 )
@@ -77,6 +78,16 @@ func NotFound(code, resource string) *AppError {
 		Message:    resource + "不存在",
 		HTTPStatus: http.StatusNotFound,
 	}
+}
+
+// IsNotFound 判断错误是否为「资源不存在」（404 语义）。
+//
+// 【为什么不能用 errors.Is(err, ErrNotFound)】每个 NotFound("PROBLEM", "题目")
+// 生成的都是独立 Code（PROBLEM_NOT_FOUND），与通用的 ErrNotFound（NOT_FOUND）
+// 不相等。按 HTTP 状态码判断才是稳妥的。
+func IsNotFound(err error) bool {
+	var appErr *AppError
+	return errors.As(err, &appErr) && appErr.HTTPStatus == http.StatusNotFound
 }
 
 // 预定义的通用错误。它们是只读模板，使用时务必用 Wrap / WithMessage 派生副本。

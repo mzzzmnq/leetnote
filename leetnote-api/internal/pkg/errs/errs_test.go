@@ -75,3 +75,19 @@ func TestErrorString(t *testing.T) {
 		t.Errorf("带底层错误的 Error() 输出不符: %s", got)
 	}
 }
+
+func TestIsNotFound(t *testing.T) {
+	// 资源级 404（Code 是 PROBLEM_NOT_FOUND）也要能被认出
+	if !errs.IsNotFound(errs.NotFound("PROBLEM", "题目")) {
+		t.Error("资源级 404 应被 IsNotFound 认出")
+	}
+	if !errs.IsNotFound(errs.ErrNotFound) {
+		t.Error("通用 ErrNotFound 应被认出")
+	}
+	if errs.IsNotFound(errs.ErrBadRequest) {
+		t.Error("400 不应被当作 404")
+	}
+	if errs.IsNotFound(errors.New("plain")) {
+		t.Error("普通 error 不应被当作 404")
+	}
+}

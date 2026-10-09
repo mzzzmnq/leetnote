@@ -34,6 +34,10 @@ type NoteRepository interface {
 	// GetByID 必须同时传 userID —— 只按 id 查会让 A 用户读到 B 用户的笔记
 	GetByID(ctx context.Context, userID, id int64) (*model.Note, error)
 
+	// GetByProblemID 找当前用户对某道题的笔记（一题一篇，由 uq_notes_user_problem 保证）。
+	// 没有则返回 404。导入时用它判断「新建还是更新」。
+	GetByProblemID(ctx context.Context, userID, problemID int64) (*model.Note, error)
+
 	List(ctx context.Context, f NoteFilter) ([]*model.Note, int64, error)
 	Update(ctx context.Context, n *model.Note) (*model.Note, error)
 	Delete(ctx context.Context, userID, id int64) error
@@ -103,6 +107,23 @@ func (r *noteRepo) GetByID(ctx context.Context, userID, id int64) (*model.Note, 
 			return nil, errs.ErrNotFound.WithMessage("笔记不存在").Wrap(err)
 		}
 		return nil, fmt.Errorf("查询笔记失败: %w", err)
+	}
+	return n, nil
+}
+
+// GetByProblemID 按 (user, problem) 找笔记。
+//
+// 数据库上有部分唯一索引 uq_notes_user_problem 保证一题一篇，
+// 所以这里最多命中一行。
+func (r *noteRepo) GetByProblemID(ctx context.Context, userID, problemID int64) (*model.Note, error) {
+	const q = `SELECT ` + noteColumns + ` FROM notes n WHERE n.user_id = $1 AND n.problem_id = $2`
+
+	n, err := scanNote(r.db.QueryRow(ctx, q, userID, problemID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errs.ErrNotFound.WithMessage("该题目还没有笔记").Wrap(err)
+		}
+		return nil, fmt.Errorf("按题目查询笔记失败: %w", err)
 	}
 	return n, nil
 }

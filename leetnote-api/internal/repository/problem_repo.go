@@ -24,6 +24,8 @@ type ProblemFilter struct {
 type ProblemRepository interface {
 	Create(ctx context.Context, p *model.Problem) error
 	GetByID(ctx context.Context, id int64) (*model.Problem, error)
+	// GetBySlug 按 title_slug 查题目。导入笔记时用它关联已有题目（题单里的 172 道）。
+	GetBySlug(ctx context.Context, slug string) (*model.Problem, error)
 	List(ctx context.Context, f ProblemFilter) ([]*model.Problem, int64, error)
 	Update(ctx context.Context, p *model.Problem) (*model.Problem, error)
 	Delete(ctx context.Context, id int64) error
@@ -97,6 +99,23 @@ func (r *problemRepo) GetByID(ctx context.Context, id int64) (*model.Problem, er
 			return nil, errs.ErrNotFound.WithMessage("题目不存在").Wrap(err)
 		}
 		return nil, fmt.Errorf("查询题目失败: %w", err)
+	}
+	return p, nil
+}
+
+// GetBySlug 按 title_slug 查题目。
+//
+// slug 是题目的稳定标识（题号会变，slug 不会），所以导入时用它做关联键。
+// 找不到返回 404，调用方据此决定「新建题目」。
+func (r *problemRepo) GetBySlug(ctx context.Context, slug string) (*model.Problem, error) {
+	const q = `SELECT ` + problemColumns + ` FROM problems WHERE title_slug = $1`
+
+	p, err := scanProblem(r.db.QueryRow(ctx, q, slug))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errs.NotFound("PROBLEM", "题目").Wrap(err)
+		}
+		return nil, fmt.Errorf("按 slug 查询题目失败: %w", err)
 	}
 	return p, nil
 }
