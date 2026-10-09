@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/mzzzmnq/leetnote-api/internal/cache"
 	"github.com/mzzzmnq/leetnote-api/internal/version"
 )
 
@@ -18,14 +19,19 @@ import (
 //   - readiness（就绪探针）：能对外服务吗？必须查数据库等关键依赖
 //
 // 这里的 /health 是 readiness 语义：数据库挂了就返回 503。
+//
+// Redis 属于【非关键依赖】（只承载限流，挂了会自动降级为放行），
+// 所以它报了问题也只体现在 redis 字段上，不改变 overall status。
 type HealthHandler struct {
 	pool      *pgxpool.Pool
+	cache     *cache.Client
 	startedAt time.Time
 }
 
-func NewHealthHandler(pool *pgxpool.Pool) *HealthHandler {
+func NewHealthHandler(pool *pgxpool.Pool, cacheClient *cache.Client) *HealthHandler {
 	return &HealthHandler{
 		pool:      pool,
+		cache:     cacheClient,
 		startedAt: time.Now(),
 	}
 }
@@ -37,6 +43,7 @@ type healthResponse struct {
 	Commit   string `json:"commit"`
 	Uptime   string `json:"uptime"`
 	Database string `json:"database"`
+	Redis    string `json:"redis"`
 }
 
 // Check GET /health
@@ -54,6 +61,14 @@ func (h *HealthHandler) Check(c *gin.Context) {
 		database = "down"
 	}
 
+	redis := "disabled"
+	if h.cache != nil && h.cache.Enabled() {
+		redis = "ok"
+		if err := h.cache.Ping(ctx); err != nil {
+			redis = "down"
+		}
+	}
+
 	c.JSON(code, healthResponse{
 		Status:   status,
 		Service:  "leetnote-api",
@@ -61,6 +76,7 @@ func (h *HealthHandler) Check(c *gin.Context) {
 		Commit:   version.Commit,
 		Uptime:   time.Since(h.startedAt).Round(time.Second).String(),
 		Database: database,
+		Redis:    redis,
 	})
 }
 

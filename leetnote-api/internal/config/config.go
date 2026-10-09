@@ -18,6 +18,14 @@ type Config struct {
 	DatabaseURL string `envconfig:"DATABASE_URL" required:"true"`
 	RedisAddr   string `envconfig:"REDIS_ADDR" default:"localhost:6379"`
 
+	// ---------- 接口限流 ----------
+	// 基于 Redis 滑动窗口。Redis 不可用时会自动降级为放行（fail-open），
+	// 详见 internal/middleware/ratelimit.go。
+	RateLimitEnabled bool          `envconfig:"RATE_LIMIT_ENABLED" default:"true"`
+	RateLimitWindow  time.Duration `envconfig:"RATE_LIMIT_WINDOW" default:"1m"`
+	RateLimitMax     int           `envconfig:"RATE_LIMIT_MAX" default:"120"`     // 已登录：每分钟请求数
+	RateLimitAuthMax int           `envconfig:"RATE_LIMIT_AUTH_MAX" default:"20"` // 未登录（认证接口）：按 IP
+
 	JWTSecret  string        `envconfig:"JWT_SECRET" required:"true"`
 	AccessTTL  time.Duration `envconfig:"ACCESS_TOKEN_TTL" default:"15m"`
 	RefreshTTL time.Duration `envconfig:"REFRESH_TOKEN_TTL" default:"168h"`

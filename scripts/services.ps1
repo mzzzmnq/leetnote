@@ -37,6 +37,10 @@ function Get-LeetNoteServices {
             Health = $null
         }
         [pscustomobject]@{
+            Key = 'redis'; Name = 'Redis'; Port = 6379; Desc = '接口限流'
+            Health = $null
+        }
+        [pscustomobject]@{
             Key = 'api'; Name = 'Go 服务'; Port = 8080; Desc = '主服务（HTTP API）'
             Health = 'http://127.0.0.1:8080/health'
         }

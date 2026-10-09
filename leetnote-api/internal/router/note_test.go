@@ -13,7 +13,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/mzzzmnq/leetnote-api/internal/dto"
-	"github.com/mzzzmnq/leetnote-api/internal/router"
 )
 
 // uniqueName 生成每次都不同的名字，避免测试之间互相污染。
@@ -124,7 +123,7 @@ func decodeNote(t *testing.T, body []byte) dto.NoteResponse {
 // TestNoteLifecycle 覆盖笔记的完整生命周期。
 func TestNoteLifecycle(t *testing.T) {
 	pool := testPool(t)
-	r := router.New(testConfig(), pool)
+	r := newRouterWith(testConfig(), pool)
 	token, _ := registerAndLogin(t, r, pool)
 
 	tagID, problemID := createNoteFixture(t, r, pool, token)
@@ -216,7 +215,7 @@ func TestNoteLifecycle(t *testing.T) {
 // （403 会泄漏「这个 ID 确实存在」）。
 func TestNoteCrossUserIsolation(t *testing.T) {
 	pool := testPool(t)
-	r := router.New(testConfig(), pool)
+	r := newRouterWith(testConfig(), pool)
 
 	tokenA, _ := registerAndLogin(t, r, pool)
 	tokenB, _ := registerAndLogin(t, r, pool)
@@ -278,7 +277,7 @@ func TestNoteCrossUserIsolation(t *testing.T) {
 // TestNoteValidation 覆盖参数校验与非法关联。
 func TestNoteValidation(t *testing.T) {
 	pool := testPool(t)
-	r := router.New(testConfig(), pool)
+	r := newRouterWith(testConfig(), pool)
 	token, _ := registerAndLogin(t, r, pool)
 
 	cases := []struct {
@@ -337,7 +336,7 @@ func TestNoteValidation(t *testing.T) {
 // 早期最常见的疏漏就是只改了一条路径。
 func TestSolutionLanguageCanonical(t *testing.T) {
 	pool := testPool(t)
-	r := router.New(testConfig(), pool)
+	r := newRouterWith(testConfig(), pool)
 	token, _ := registerAndLogin(t, r, pool)
 
 	// ---------- 路径一：保存笔记时整批提交解法 ----------

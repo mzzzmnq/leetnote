@@ -39,6 +39,7 @@ if (-not (Get-Variable -Name LocalPathsRoot -Scope Script -ErrorAction SilentlyC
 $LeetNoteGoExe = $null
 $LeetNotePgBin = $null
 $LeetNotePgData = $null
+$LeetNoteRedisExe = $null
 $LeetNoteDbName = $null
 $LeetNoteDbUser = $null
 $LeetNoteDbPass = $null
@@ -118,6 +119,20 @@ if (-not $LeetNotePgData) {
 }
 
 # ---------------------------------------------------------------
+# 4.5 Redis（可选：只用于接口限流，没装也不影响服务启动 —— API 会降级放行）
+# ---------------------------------------------------------------
+if (-not $LeetNoteRedisExe) {
+    $LeetNoteRedisExe = Find-LeetNoteExe 'redis-server'
+}
+
+if (-not $LeetNoteRedisExe) {
+    $candidates = @('D:\dev\redis\redis-server.exe')
+    foreach ($guess in $candidates) {
+        if ($guess -and (Test-Path $guess)) { $LeetNoteRedisExe = $guess; break }
+    }
+}
+
+# ---------------------------------------------------------------
 # 5. 数据库连接参数
 #
 # 与 leetnote-api/.env 的 DATABASE_URL 是同一套值。
@@ -137,6 +152,7 @@ if (-not $LeetNoteDbSuperPass) { $LeetNoteDbSuperPass = 'postgres' }
 $env:LEETNOTE_GO_EXE = $LeetNoteGoExe
 $env:LEETNOTE_PG_BIN = $LeetNotePgBin
 $env:LEETNOTE_PGDATA = $LeetNotePgData
+$env:LEETNOTE_REDIS_EXE = $LeetNoteRedisExe
 
 # setup.ps1 用 $env:LEETNOTE_DB_* 拼 DATABASE_URL，这里必须一并导出。
 # 漏了这几个会让生成的连接串变成 postgres://:@:/...（用户/库全空），
@@ -171,6 +187,14 @@ function Get-LeetNotePgExe {
 }
 
 <#
+Redis 是可选的：只承载限流，没装时 API 会自动降级为放行。
+所以这里【返回 $null 而不是抛异常】，调用方自行决定怎么提示。
+#>
+function Get-LeetNoteRedisExe {
+    return $LeetNoteRedisExe
+}
+
+<#
 把密码放进 PGPASSWORD 再调 psql。
 比拼 connection string 更稳 —— 密码里有 @ 或 : 时 URL 会解析错。
 #>
@@ -190,10 +214,12 @@ function Get-LeetNoteToolchainStatus {
         GoExe    = $LeetNoteGoExe
         PgBin    = $LeetNotePgBin
         PgData   = $LeetNotePgData
+        RedisExe = $LeetNoteRedisExe
         DbName   = $LeetNoteDbName
         HasGo    = [bool]$LeetNoteGoExe
         HasPg    = [bool]$LeetNotePgBin
         HasData  = [bool]$LeetNotePgData
+        HasRedis = [bool]$LeetNoteRedisExe
         ConfigFile = if (Test-Path $LocalConfigFile) { $LocalConfigFile } else { $null }
     }
 }

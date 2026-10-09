@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/mzzzmnq/leetnote-api/internal/cache"
 	"github.com/mzzzmnq/leetnote-api/internal/config"
 	"github.com/mzzzmnq/leetnote-api/internal/db"
 	"github.com/mzzzmnq/leetnote-api/internal/logging"
@@ -50,10 +51,15 @@ func run() error {
 	defer pool.Close()
 	slog.Info("数据库连接池就绪", "max_conns", pool.Config().MaxConns)
 
+	// ---------- 2.5 Redis（可选依赖）----------
+	// 连不上不会让服务起不来：客户端会降级为「未启用」，限流中间件据此放行。
+	cacheClient := cache.New(context.Background(), cfg.RedisAddr)
+	defer func() { _ = cacheClient.Close() }()
+
 	// ---------- 3. HTTP 服务 ----------
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.HTTPPort),
-		Handler: router.New(cfg, pool),
+		Handler: router.New(cfg, pool, cacheClient),
 		// ReadHeaderTimeout 是防「慢连接攻击」的第一道防线，保持较短。
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,

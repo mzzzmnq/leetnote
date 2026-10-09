@@ -21,8 +21,8 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\scripts\services.ps1"
 . "$PSScriptRoot\scripts\postgres.ps1"
 
-# 停止顺序：先停应用，最后停数据库（应用可能还在写库）
-$stopOrder = @('web', 'ai', 'api', 'db')
+# 停止顺序：先停应用，再停 Redis，最后停数据库（应用可能还在写库）
+$stopOrder = @('web', 'ai', 'api', 'redis', 'db')
 
 foreach ($key in $stopOrder) {
     $svc = Get-LeetNoteServices | Where-Object Key -eq $key

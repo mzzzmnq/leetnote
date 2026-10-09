@@ -11,6 +11,7 @@
 |---|---|---|---|
 | Go | **1.27.1** | `D:\dev\go` | 便携版 zip（免管理员） |
 | PostgreSQL | **18.6** | `D:\dev\pgsql` | 便携版 binaries zip（免管理员） |
+| Redis | **5.0.14.1** | `D:\dev\redis` | 便携版 zip（tporadowski/redis，**可选**，只用于限流） |
 | Node.js | 已有 | `C:\Program Files\nodejs` | 系统已装 |
 | Python | 已有（Anaconda） | `D:\Anaconda` | 系统已装 |
 | Git | 已有 | `D:\Git` | 系统已装 |

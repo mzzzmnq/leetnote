@@ -18,7 +18,7 @@
 | 代码规模 | Go 9,939 行 / 前端 5,708 行 / Python 1,364 行 / PowerShell 1,571 行（均按非空行） |
 | 接口 | 40 个路由（3 探针 + 37 业务） |
 | 数据库 | 11 张业务表 + `schema_migrations`，7 个版本化迁移 |
-| 测试覆盖 | router **99.8%** · model 93.8% · pkg 87.8–93.3% · ai 75.4% · service 26.0% · middleware 36.0% |
+| 测试覆盖 | router **99.8%** · model 93.8% · pkg 87.8–93.3% · cache 85.4% · ai 75.4% · middleware 51.1% · service 26.0% |
 | 单测数量 | Go 若干 + Python 22 个 |
 
 **当前数据状态**：2 个用户 / 10 篇笔记 / 18 个解法 / 174 道题 / 32 个标签 / 迁移版本 7。
@@ -36,6 +36,7 @@
 | Python | **3.11（官方安装版）** | **绝对不要用 Anaconda 的**，见「已知的坑」 |
 | Node.js | ≥ 20 | |
 | PostgreSQL | ≥ 16 + pgvector | 或者用 Docker 只起数据库 |
+| Redis | ≥ 5 | **可选**：只用于接口限流；没装则限流自动降级为放行，不影响启动 |
 
 ### 三条命令
 
@@ -54,6 +55,7 @@
 | 服务 | 端口 | 启动方式 | 日志 |
 |---|---|---|---|
 | PostgreSQL | 5432 | `scripts/postgres.ps1`（pg_ctl 分离启动） | `<PGDATA>\server.log` |
+| Redis | 6379 | `start-all.ps1`（redis-server，**可选**） | 控制台/文件 |
 | Go 主服务 | 8080 | `bin\leetnote-api.exe` | `%TEMP%\leetnote-logs\api.out.log` |
 | Python AI | 8000 | **`python run.py`** | `%TEMP%\leetnote-logs\ai.out.log` |
 | 前端 | 5173 | `npm run dev` | `%TEMP%\leetnote-logs\web.out.log` |
@@ -264,13 +266,14 @@ pgvector **不是 trusted 扩展**，只有超级用户能装。而迁移是用�
 
 M1 骨架 → M2 认证（含 GitHub OAuth）→ M3 核心 CRUD → M4/M5 前端与笔记功能 →
 M6 搜索与统计 → 题单导入 → M7 相似题 + LLM 讲解 → M8 间隔重复（SM-2）→
-题目库增强（难度分 / 题单顺序）→ 界面改版 + 夜间模式 → 多语言解法 → 可移植化 + Docker
+题目库增强（难度分 / 题单顺序）→ 界面改版 + 夜间模式 → 多语言解法 → 可移植化 + Docker →
+接口限流（Redis 滑动窗口）
 
 ### 待办
 
 优先级从高到低：
 
-1. **Redis 缓存与限流**（M8 剩余）—— `REDIS_ADDR` 已在配置里预留，但没用上
+1. **Redis 缓存**（M8 剩余）—— **接口限流已做**（滑动窗口 + Lua，见 `internal/middleware/ratelimit.go` 与 `internal/cache/`）；还剩「缓存热榜」（题目列表 / 统计缓存 + 防穿透）
 2. **图片上传**（M8 剩余）—— 笔记里插图
 3. **GraphRAG 知识点图谱**（M7 剩余）—— 原设计里有，未做
 4. **部署上线** —— Docker 那套已经写好，但**从未实际构建过**（本机没装 Docker）

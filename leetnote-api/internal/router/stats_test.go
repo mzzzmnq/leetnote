@@ -10,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/mzzzmnq/leetnote-api/internal/dto"
-	"github.com/mzzzmnq/leetnote-api/internal/router"
 )
 
 // insertNotesAtDays 插入若干条笔记，created_at 分别为「今天 - offsetDays」。
@@ -44,7 +43,7 @@ func decodeOverview(t *testing.T, body []byte) dto.StatsOverviewResponse {
 // 期望：当前连续 3、最长连续 3、打卡天数 4。
 func TestStatsStreak(t *testing.T) {
 	pool := testPool(t)
-	r := router.New(testConfig(), pool)
+	r := newRouterWith(testConfig(), pool)
 	token, _ := registerAndLogin(t, r, pool)
 
 	// 拿到当前用户 ID（注册时返回过，这里从 /users/me 再取一次更直观）
@@ -79,7 +78,7 @@ func TestStatsStreak(t *testing.T) {
 // 昨天有记录、今天没有时，连续不应被判定为中断。
 func TestStatsStreakCountsYesterday(t *testing.T) {
 	pool := testPool(t)
-	r := router.New(testConfig(), pool)
+	r := newRouterWith(testConfig(), pool)
 	token, _ := registerAndLogin(t, r, pool)
 
 	w := doJSON(t, r, http.MethodGet, "/api/v1/users/me", nil, authHeader(token))
@@ -97,7 +96,7 @@ func TestStatsStreakCountsYesterday(t *testing.T) {
 // 最近一次记录在 3 天前时，连续应归零。
 func TestStatsStreakBroken(t *testing.T) {
 	pool := testPool(t)
-	r := router.New(testConfig(), pool)
+	r := newRouterWith(testConfig(), pool)
 	token, _ := registerAndLogin(t, r, pool)
 
 	w := doJSON(t, r, http.MethodGet, "/api/v1/users/me", nil, authHeader(token))
@@ -120,7 +119,7 @@ func TestStatsStreakBroken(t *testing.T) {
 // 趋势接口要补齐没有记录的日期，否则前端折线图会出现断点。
 func TestStatsTrendFillsGaps(t *testing.T) {
 	pool := testPool(t)
-	r := router.New(testConfig(), pool)
+	r := newRouterWith(testConfig(), pool)
 	token, _ := registerAndLogin(t, r, pool)
 
 	w := doJSON(t, r, http.MethodGet, "/api/v1/users/me", nil, authHeader(token))
@@ -164,7 +163,7 @@ func TestStatsTrendFillsGaps(t *testing.T) {
 // TestSearch 覆盖搜索的核心行为。
 func TestSearch(t *testing.T) {
 	pool := testPool(t)
-	r := router.New(testConfig(), pool)
+	r := newRouterWith(testConfig(), pool)
 	token, _ := registerAndLogin(t, r, pool)
 
 	create := func(title, content string) {
@@ -213,7 +212,7 @@ func TestSearch(t *testing.T) {
 // LIKE 通配符必须被转义，否则用户搜 "%" 会命中全部笔记。
 func TestSearchEscapesLikeWildcards(t *testing.T) {
 	pool := testPool(t)
-	r := router.New(testConfig(), pool)
+	r := newRouterWith(testConfig(), pool)
 	token, _ := registerAndLogin(t, r, pool)
 
 	create := func(title string) {
@@ -253,7 +252,7 @@ func TestSearchEscapesLikeWildcards(t *testing.T) {
 // 搜索同样必须受 user_id 隔离。
 func TestSearchIsolatedByUser(t *testing.T) {
 	pool := testPool(t)
-	r := router.New(testConfig(), pool)
+	r := newRouterWith(testConfig(), pool)
 
 	tokenA, _ := registerAndLogin(t, r, pool)
 	tokenB, _ := registerAndLogin(t, r, pool)

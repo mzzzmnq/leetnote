@@ -23,7 +23,7 @@
 # =============================================================
 
 param(
-    [ValidateSet('all', 'db', 'api', 'ai', 'web')]
+    [ValidateSet('all', 'db', 'redis', 'api', 'ai', 'web')]
     [string]$Only = 'all',
 
     # 先停掉已在运行的服务再启动
@@ -70,6 +70,31 @@ function Wait-LeetNotePort {
 
     Write-Host ("  ❌ {0,-11} :{1} 启动超时" -f $Name, $Port) -ForegroundColor Red
     return $false
+}
+
+# ---------------------------------------------------------------- Redis
+if (Should-Run 'redis') {
+    $svc = (Get-LeetNoteServices | Where-Object Key -eq 'redis')
+
+    if (Test-LeetNotePort -Port $svc.Port) {
+        Write-Host ("  ✅ {0,-11} :{1}（已在运行）" -f $svc.Name, $svc.Port) -ForegroundColor Green
+    }
+    elseif (-not (Get-LeetNoteRedisExe)) {
+        # Redis 是可选的：没装则限流降级为放行，绝不阻断启动
+        Write-Host ("  ⚠️  {0,-11} 未安装，接口限流将降级为放行" -f $svc.Name) -ForegroundColor Yellow
+    }
+    else {
+        $redisExe = Get-LeetNoteRedisExe
+        $redisDir = Split-Path -Parent $redisExe
+        $redisConf = Join-Path $redisDir 'redis.windows.conf'
+        $redisArgs = @()
+        if (Test-Path $redisConf) { $redisArgs += $redisConf }
+
+        Start-Process -FilePath $redisExe -ArgumentList $redisArgs `
+            -WorkingDirectory $redisDir -WindowStyle Hidden
+
+        Wait-LeetNotePort -Port $svc.Port -Name $svc.Name | Out-Null
+    }
 }
 
 # ---------------------------------------------------------------- PostgreSQL

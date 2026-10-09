@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/mzzzmnq/leetnote-api/internal/cache"
 	"github.com/mzzzmnq/leetnote-api/internal/config"
 	"github.com/mzzzmnq/leetnote-api/internal/router"
 )
@@ -57,7 +58,13 @@ func testConfig() *config.Config {
 
 func newTestRouter(t *testing.T) *gin.Engine {
 	t.Helper()
-	return router.New(testConfig(), testPool(t))
+	return newRouterWith(testConfig(), testPool(t))
+}
+
+// newRouterWith 供需要自定义配置的测试使用。
+// 传空地址 → Redis「未启用」→ 限流关闭，既有集成测试不受影响。
+func newRouterWith(cfg *config.Config, pool *pgxpool.Pool) *gin.Engine {
+	return router.New(cfg, pool, cache.New(context.Background(), ""))
 }
 
 func do(t *testing.T, r *gin.Engine, method, path string) *httptest.ResponseRecorder {

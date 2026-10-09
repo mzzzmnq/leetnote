@@ -142,6 +142,12 @@ GRPC_PORT=9091
 DATABASE_URL=postgres://$($env:LEETNOTE_DB_USER):$($env:LEETNOTE_DB_PASS)@$($env:LEETNOTE_DB_HOST):$($env:LEETNOTE_DB_PORT)/$($env:LEETNOTE_DB_NAME)?sslmode=disable
 REDIS_ADDR=localhost:6379
 
+# 接口限流（Redis 滑动窗口）。Redis 不可用时自动降级为放行。
+RATE_LIMIT_ENABLED=true
+RATE_LIMIT_WINDOW=1m
+RATE_LIMIT_MAX=120
+RATE_LIMIT_AUTH_MAX=20
+
 # 每次生成都是随机的
 JWT_SECRET=$jwtSecret
 ACCESS_TOKEN_TTL=15m

@@ -5,6 +5,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/mzzzmnq/leetnote-api/internal/ai"
+	"github.com/mzzzmnq/leetnote-api/internal/cache"
 	"github.com/mzzzmnq/leetnote-api/internal/config"
 	"github.com/mzzzmnq/leetnote-api/internal/handler"
 	"github.com/mzzzmnq/leetnote-api/internal/middleware"
@@ -29,7 +30,7 @@ import (
 //
 // RequestID 放最外层，后续所有日志才能带上它；
 // Recovery 放在 Logger 之内，panic 转 500 时 Logger 仍能记录到状态码。
-func New(cfg *config.Config, pool *pgxpool.Pool) *gin.Engine {
+func New(cfg *config.Config, pool *pgxpool.Pool, cacheClient *cache.Client) *gin.Engine {
 	// 注册自定义校验规则（username 等），必须在任何请求进来之前完成
 	validator.Register()
 
@@ -74,7 +75,16 @@ func New(cfg *config.Config, pool *pgxpool.Pool) *gin.Engine {
 	reviewHandler := handler.NewReviewHandler(reviewSvc)
 	statsHandler := handler.NewStatsHandler(statsSvc)
 	searchHandler := handler.NewSearchHandler(searchSvc)
-	healthHandler := handler.NewHealthHandler(pool)
+	healthHandler := handler.NewHealthHandler(pool, cacheClient)
+
+	// 限流参数。同一份配置用在两处（见下方 auth / authed 组）：
+	// 未登录走 IP + AuthMax，已登录走 user_id + Max。
+	rateCfg := middleware.RateLimitConfig{
+		Enabled: cfg.RateLimitEnabled,
+		Window:  cfg.RateLimitWindow,
+		Max:     cfg.RateLimitMax,
+		AuthMax: cfg.RateLimitAuthMax,
+	}
 
 	// ---------- 全局中间件 ----------
 	r := gin.New()
@@ -97,7 +107,7 @@ func New(cfg *config.Config, pool *pgxpool.Pool) *gin.Engine {
 	//
 	// logout 刻意不要求登录：access token 已过期时，
 	// 用户仍然应该能清掉 refresh token Cookie 完成登出。
-	auth := v1.Group("/auth")
+	auth := v1.Group("/auth", middleware.RateLimit(cacheClient, rateCfg))
 	{
 		auth.POST("/register", authHandler.Register)
 		auth.POST("/login", authHandler.Login)
@@ -112,7 +122,7 @@ func New(cfg *config.Config, pool *pgxpool.Pool) *gin.Engine {
 	}
 
 	// 需要登录的接口
-	authed := v1.Group("", middleware.Auth(tokenManager))
+	authed := v1.Group("", middleware.Auth(tokenManager), middleware.RateLimit(cacheClient, rateCfg))
 	{
 		users := authed.Group("/users")
 		{

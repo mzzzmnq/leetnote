@@ -16,7 +16,6 @@ import (
 
 	"github.com/mzzzmnq/leetnote-api/internal/config"
 	"github.com/mzzzmnq/leetnote-api/internal/dto"
-	"github.com/mzzzmnq/leetnote-api/internal/router"
 )
 
 // doJSON 发一个 JSON 请求。
@@ -87,7 +86,7 @@ func TestAuthFlow(t *testing.T) {
 		AccessTTL:   15 * time.Minute,
 		RefreshTTL:  24 * time.Hour,
 	}
-	r := router.New(cfg, pool)
+	r := newRouterWith(cfg, pool)
 
 	username, email := uniqueIdentity()
 	const password = "integration-test-pw-123"

@@ -61,6 +61,21 @@ services:
     restart: unless-stopped
 
   # -------------------------------------------------------------
+  # Redis（接口限流）
+  # -------------------------------------------------------------
+  # 同样不暴露端口，只在容器网络内可达。
+  # 限流数据丢了无所谓（重新计数即可），所以不挂卷、关掉持久化。
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  # -------------------------------------------------------------
   # 数据库迁移（一次性任务）
   # -------------------------------------------------------------
   # 复用 api 的镜像，只是换个 entrypoint。迁移完就退出，
@@ -98,6 +113,13 @@ services:
       ACCESS_TOKEN_TTL: 15m
       REFRESH_TOKEN_TTL: 168h
 
+      # 接口限流（走容器内网的服务名 redis，不是 localhost）
+      REDIS_ADDR: redis:6379
+      RATE_LIMIT_ENABLED: "true"
+      RATE_LIMIT_WINDOW: 1m
+      RATE_LIMIT_MAX: "120"
+      RATE_LIMIT_AUTH_MAX: "20"
+
       # 同源访问（nginx 反代），CORS 其实用不上；
       # 留一个值是为了直接用 IP+端口访问 API 调试时能用
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost}
@@ -115,6 +137,8 @@ services:
       GITHUB_REDIRECT_URL: ${GITHUB_REDIRECT_URL:-http://localhost/api/v1/auth/github/callback}
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       # 迁移成功后才启动，避免表还没建好就开始服务请求
       migrate:
