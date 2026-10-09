@@ -76,28 +76,36 @@ OpenCode Go 是 $10/月的订阅，包含多种开源编码模型。**它允许�
 > `Request is missing x-opencode-session and cannot be routed efficiently`
 
 **拿到 API Key**：TUI 里执行 `/connect` → 选 `OpenCode Go` → 粘贴 Key。
-本机已登录的话，Key 就在 `~/.local/share/opencode/auth.json` 的 `opencode-go.key`。
 
-**配置**（`.env`）：
+**配置**（`.env`）：**key 可以留空** —— 服务启动时会自动从本机 opencode 凭据库
+（`~/.local/share/opencode/` 下的 `opencode.db` 的 `credential` 表，或 `auth.json` 的
+`opencode-go.key`）读出来，适合本机个人使用，零配置。
 
 ```dotenv
-CHAT_API_KEY=oc_sk_xxxxxxxx
+# 留空 = 自动发现本机 opencode 的 OpenCode Go key；想用别的 key 再显式填
+CHAT_API_KEY=
 CHAT_BASE_URL=https://opencode.ai/zen/go/v1
-CHAT_MODEL=space-bunny-free
+CHAT_MODEL=deepseek-v4.1-flash
 
 # 上面两条要求由这两个配置满足；换成别的供应商时留空即可
 CHAT_USER_AGENT=leetnote-ai/0.1.0
 CHAT_SESSION_HEADER=x-opencode-session
 ```
 
+> `.env` 里把 `CHAT_BASE_URL` / `CHAT_MODEL` 留空也安全：会回退到默认值
+> （OpenCode Go 端点 + `deepseek-v4.1-flash`），不会被空字符串覆盖。
+> 显式填了 `CHAT_API_KEY` 则优先用它，不再自动发现。
+
 **选模型的注意点**：
 
 | 模型 | 端点风格 | 备注 |
 |---|---|---|
-| `space-bunny-free` | `/chat/completions` | **限时免费不限量**，默认选择 |
-| `deepseek-v4.1-flash` | `/chat/completions` | 便宜，但是**推理模型** |
+| `deepseek-v4.1-flash` | `/chat/completions` | 默认；便宜、中文质量好，但是**推理模型** |
+| `space-bunny` | `/chat/completions` | 免费额度模型（原名 `space-bunny-free` 已下线） |
 | `qwen3.8-flash` / `minimax-m3` | `/messages`（Anthropic 风格） | 本客户端不支持 |
 | `gpt-6-luna` / `grok-4.7` | `/responses` | 本客户端不支持 |
+
+> 可用模型以 `GET /v1/models` 为准（本机自动发现 key 后可查询）。
 
 > **推理模型的坑**：`deepseek` 系列会先产出一大段 reasoning。如果 `max_tokens`
 > 太小，正文会被挤成空字符串（`completion_tokens` 正好等于上限就是被截断的信号）。

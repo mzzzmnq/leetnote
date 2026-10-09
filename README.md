@@ -79,6 +79,7 @@ LeetNote 想把这件事系统化：
 | 多供应商 | Embedding 与对话模型分开配置，任何 OpenAI 兼容服务都能接 |
 
 > AI 服务由 **OpenCode Go** 订阅驱动（多种开源编码模型），也支持硅基流动 / 智谱 / 通义 / OpenAI。
+> 本机使用时 **key 无需手填**：服务会自动从 opencode 的本机凭据库读取（见 `leetnote-ai/README.md`）。
 
 ### 🔁 间隔重复复习（SM-2）
 
@@ -339,7 +340,7 @@ cd leetnote-ai
 python -m venv .venv          # 务必用官方 Python，别用 Anaconda
 .venv/Scripts/pip install fastapi "uvicorn[standard]" pydantic-settings \
     "psycopg[binary,pool]" httpx numpy
-cp .env.example .env          # 填 CHAT_API_KEY 才能用 LLM 功能
+cp .env.example .env          # CHAT_API_KEY 可留空，会自动发现本机 OpenCode Go key
 .venv/Scripts/python run.py   # :8000（必须用 run.py，见 docs/ENVIRONMENT.md）
 ```
 

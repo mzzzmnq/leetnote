@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from app.api.deps import get_embedder
 from app.core.config import Settings, get_settings
@@ -15,6 +15,7 @@ router = APIRouter(tags=["health"])
 
 @router.get("/health", response_model=HealthResponse)
 async def health(
+    request: Request,
     embedder: Embedder = Depends(get_embedder),
     settings: Settings = Depends(get_settings),
 ) -> HealthResponse:
@@ -34,6 +35,10 @@ async def health(
         db_status = "down"
         status_value = "degraded"
 
+    # 对话模型是否可用以【实际构建出的客户端】为准 —— 它可能来自 .env，
+    # 也可能来自本机 opencode 凭据的自动发现（见 app/llm/__init__.py）。
+    chat_client = getattr(request.app.state, "chat_client", None)
+
     return HealthResponse(
         status=status_value,
         service="leetnote-ai",
@@ -41,6 +46,6 @@ async def health(
         embedding_mode="remote" if settings.use_remote_embedding else "local",
         embedding_dim=embedder.dim,
         database=db_status,
-        chat_model=settings.chat_model if settings.use_chat_model else "",
-        chat_enabled=settings.use_chat_model,
+        chat_model=chat_client.model if chat_client else "",
+        chat_enabled=chat_client is not None,
     )

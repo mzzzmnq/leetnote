@@ -181,12 +181,12 @@ EMBEDDING_DIM=1536
 LLM_API_KEY=
 LLM_BASE_URL=https://api.siliconflow.cn/v1
 
-# 对话模型（AI 讲解）。换机器要重新填自己的 key
+# 对话模型（AI 讲解）。key 留空时会自动从本机 opencode 凭据读取（OpenCode Go 订阅）
 CHAT_API_KEY=
-CHAT_BASE_URL=
-CHAT_MODEL=
+CHAT_BASE_URL=https://opencode.ai/zen/go/v1
+CHAT_MODEL=deepseek-v4.1-flash
 CHAT_USER_AGENT=leetnote-ai/0.1.0
-CHAT_SESSION_HEADER=
+CHAT_SESSION_HEADER=x-opencode-session
 "@
 
 New-EnvFile -Label 'frontend\.env' -Path (Join-Path $Root 'frontend\.env') -Content @"

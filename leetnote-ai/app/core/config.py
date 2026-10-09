@@ -7,6 +7,11 @@ from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# 对话模型的默认端点与模型（OpenCode Go 订阅）。
+# .env 里把这两项留空时回退到这里，避免「空字符串覆盖了默认值」导致 base_url=""。
+DEFAULT_CHAT_BASE_URL = "https://opencode.ai/zen/go/v1"
+DEFAULT_CHAT_MODEL = "deepseek-v4.1-flash"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -65,8 +70,18 @@ class Settings(BaseSettings):
 
     @property
     def use_chat_model(self) -> bool:
-        """是否启用对话模型（LLM 讲解等）。"""
+        """是否启用了对话模型（只看 .env；实际是否可用还要看自动发现，见 llm 工厂）。"""
         return bool(self.chat_api_key and self.chat_model)
+
+    @property
+    def effective_chat_base_url(self) -> str:
+        """有效端点：.env 留空则回退到 OpenCode Go 默认值。"""
+        return self.chat_base_url.strip() or DEFAULT_CHAT_BASE_URL
+
+    @property
+    def effective_chat_model(self) -> str:
+        """有效模型：.env 留空则回退到默认模型。"""
+        return self.chat_model.strip() or DEFAULT_CHAT_MODEL
 
     @property
     def is_production(self) -> bool:
