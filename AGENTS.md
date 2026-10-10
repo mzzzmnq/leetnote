@@ -302,6 +302,7 @@ AI 讲解接入本机 OpenCode Go 订阅（key 自动发现，零配置）
 | `docs/DESIGN.md` | 要改数据库、改接口、改架构时。含完整 DDL、API 契约、迁移策略、员工号面试要点 |
 | `docs/ENVIRONMENT.md` | 环境相关的问题（安装、路径、踩坑） |
 | `docs/ROADMAP.md` | 想知道某个功能为什么这么做、以及 22 周学习路线 |
+| `docs/STUDY.md` | **想系统学 Go 后端 / Python AI 时**：逐文件导读（学习顺序 + 关键符号 + 自测题） |
 | `README.md` | 对外介绍（功能、技术栈、快速开始）。**改功能时记得同步** |
 | `leetnote-api/README.md` | 只跑后端时 |
 | `leetnote-ai/README.md` | 只跑 AI 服务时 |
