@@ -90,7 +90,7 @@ def test_build_chat_client_does_not_discover_for_other_providers(
     monkeypatch.setattr("app.llm.discover_local_api_key", fake)
 
     # 端点不是 OpenCode Go 时：没有 key 就是不可用，且【不能】去读 opencode 凭据
-    settings = Settings(chat_api_key="", chat_base_url=ZHIPU_BASE, chat_model="glm-4.7-flash")
+    settings = Settings(chat_api_key="", chat_base_url=ZHIPU_BASE, chat_model="glm-4.5-flash")
     assert build_chat_client(settings) is None
     assert called["n"] == 0, "非 OpenCode Go 端点不该自动发现 key"
 
@@ -103,7 +103,7 @@ def test_build_chat_client_default_model_is_zhipu(monkeypatch: pytest.MonkeyPatc
 
     assert client is not None
     # 默认模型应当是智谱的免费模型
-    assert client.model == DEFAULT_CHAT_MODEL == "glm-4.7-flash"
+    assert client.model == DEFAULT_CHAT_MODEL == "glm-4.5-flash"
 
 
 def test_build_chat_client_prefers_explicit_env_key(monkeypatch: pytest.MonkeyPatch) -> None:

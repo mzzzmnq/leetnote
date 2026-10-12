@@ -8,10 +8,10 @@ from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # 对话模型的默认端点与模型。
-# 默认用【智谱 GLM-4.7-Flash】—— 永久免费、国内直连、编码/中文都强。
+# 默认用【智谱 GLM-4.5-Flash】—— 永久免费、国内直连、编码/中文都强。
 # .env 里把这两项留空时回退到这里，避免「空字符串覆盖了默认值」导致 base_url=""。
 DEFAULT_CHAT_BASE_URL = "https://open.bigmodel.cn/api/paas/v4"
-DEFAULT_CHAT_MODEL = "glm-4.7-flash"
+DEFAULT_CHAT_MODEL = "glm-4.5-flash"
 
 # OpenCode Go 订阅的端点。它不是默认值，但代码里有几处需要按供应商特判：
 #   - 两个硬性要求（自带 User-Agent + 稳定的 x-opencode-session 头）
@@ -45,10 +45,10 @@ class Settings(BaseSettings):
 
     # ---------- 对话模型（LLM 生成讲解）----------
     # 与 embedding 分开配置：两者常常来自不同供应商。
-    # 默认指向【智谱 GLM-4.7-Flash】（免费）；改成 OpenCode Go 只需换 base_url + model。
+    # 默认指向【智谱 GLM-4.5-Flash】（免费）；改成 OpenCode Go 只需换 base_url + model。
     chat_api_key: str = ""
     chat_base_url: str = "https://open.bigmodel.cn/api/paas/v4"
-    chat_model: str = "glm-4.7-flash"
+    chat_model: str = "glm-4.5-flash"
 
     # OpenCode Go 对第三方客户端有两条硬性要求
     # （见 https://opencode.ai/docs/go/#where-can-i-use-it）：
@@ -88,7 +88,7 @@ class Settings(BaseSettings):
 
     @property
     def effective_chat_model(self) -> str:
-        """有效模型：.env 留空则回退到默认模型（GLM-4.7-Flash）。"""
+        """有效模型：.env 留空则回退到默认模型（GLM-4.5-Flash）。"""
         return self.chat_model.strip() or DEFAULT_CHAT_MODEL
 
     @property

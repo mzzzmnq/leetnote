@@ -78,7 +78,7 @@ LeetNote 想把这件事系统化：
 | AI 笔记点评 | LLM 按「思路 / 关键点 / 复杂度 / 易错点」四段点评，实测能指出笔记里不严谨的地方 |
 | 多供应商 | Embedding 与对话模型分开配置，任何 OpenAI 兼容服务都能接 |
 
-> AI 服务默认用 **智谱 GLM-4.7-Flash（永久免费）** 驱动；也支持 **OpenCode Go** 订阅
+> AI 服务默认用 **智谱 GLM-4.5-Flash（永久免费）** 驱动；也支持 **OpenCode Go** 订阅
 > （含免费模型，key 可从本机 opencode 凭据自动发现）以及硅基流动 / 通义 / OpenAI 等。
 > 详见 `leetnote-ai/README.md`。
 
@@ -341,7 +341,7 @@ cd leetnote-ai
 python -m venv .venv          # 务必用官方 Python，别用 Anaconda
 .venv/Scripts/pip install fastapi "uvicorn[standard]" pydantic-settings \
     "psycopg[binary,pool]" httpx numpy
-cp .env.example .env          # 填 CHAT_API_KEY（默认智谱 GLM-4.7-Flash，免费）
+cp .env.example .env          # 填 CHAT_API_KEY（默认智谱 GLM-4.5-Flash，免费）
 .venv/Scripts/python run.py   # :8000（必须用 run.py，见 docs/ENVIRONMENT.md）
 ```
 

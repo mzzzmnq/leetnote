@@ -63,9 +63,9 @@ curl http://127.0.0.1:8000/health
 
 与 embedding **分开配置** —— 两者常常来自不同供应商。
 
-### 默认：智谱 GLM-4.7-Flash（永久免费）
+### 默认：智谱 GLM-4.5-Flash（永久免费）
 
-智谱的 **`glm-4.7-flash`** 是 30B 级、**永久免费**、面向编码/Agent 优化的模型，
+智谱的 **`glm-4.5-flash`** 是 30B 级、**永久免费**、面向编码/Agent 优化的模型，
 国内直连、中文讲解质量好，作为默认最省心。
 
 1. 去 <https://open.bigmodel.cn/> 注册并实名，创建一个 **API Key**。
@@ -74,12 +74,16 @@ curl http://127.0.0.1:8000/health
 ```dotenv
 CHAT_API_KEY=你的智谱key
 CHAT_BASE_URL=https://open.bigmodel.cn/api/paas/v4
-CHAT_MODEL=glm-4.7-flash
+CHAT_MODEL=glm-4.5-flash
 CHAT_USER_AGENT=leetnote-ai/0.1.0
 CHAT_SESSION_HEADER=
 ```
 
 > `CHAT_BASE_URL` / `CHAT_MODEL` 留空会回退到上面的默认值，不会被空字符串覆盖。
+>
+> **为什么不是 `glm-4.7-flash`**：它同样是免费模型，但实测**被严重限流**（6 次只成功 1 次），
+> 反而不可用；`glm-4.5-flash` 实测 6 次成功 5 次，配合客户端重试足够稳。
+> 想要更高可用率可换付费的 `glm-4.7` / `glm-4.5-air`（实测 6/6）。
 
 ### 改用 OpenCode Go 订阅（$10/月，也含免费模型）
 

@@ -412,13 +412,13 @@ Windows 的 `ProactorEventLoop` 与 psycopg3 异步模式不兼容，而 uvicorn
 
 ### AI 讲解的对话模型（默认智谱，免费）
 
-「AI 讲解」的对话模型默认指向 **智谱 `glm-4.7-flash`（永久免费）**，在
+「AI 讲解」的对话模型默认指向 **智谱 `glm-4.5-flash`（永久免费）**，在
 `leetnote-ai/.env` 里填 `CHAT_API_KEY`（智谱控制台申请）即可：
 
 ```dotenv
 CHAT_API_KEY=你的智谱key
 CHAT_BASE_URL=https://open.bigmodel.cn/api/paas/v4
-CHAT_MODEL=glm-4.7-flash
+CHAT_MODEL=glm-4.5-flash
 ```
 
 **改用 OpenCode Go 时**（`CHAT_BASE_URL=https://opencode.ai/zen/go/v1`）：`CHAT_API_KEY`

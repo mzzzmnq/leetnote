@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 def build_chat_client(settings: Settings) -> ChatClient | None:
     """按「环境变量 → （仅 OpenCode Go）本机自动发现 → 不可用」取 key，构建对话模型客户端。
 
-    默认端点是智谱 GLM-4.7-Flash（免费）。自动发现只对 OpenCode Go 生效 ——
+    默认端点是智谱 GLM-4.5-Flash（免费）。自动发现只对 OpenCode Go 生效 ——
     否则会把 OpenCode Go 的 key 发到智谱等平台上，既不安全也没意义。
     """
     api_key = settings.chat_api_key.strip()
