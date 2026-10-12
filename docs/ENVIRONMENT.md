@@ -410,17 +410,24 @@ cd D:\vibecoding_test\leetnote\leetnote-ai
 Windows 的 `ProactorEventLoop` 与 psycopg3 异步模式不兼容，而 uvicorn 0.53
 把 `ProactorEventLoop` 硬编码进了 loop factory，只能绕开它。
 
-### AI 讲解的 key：自动发现（无需手填）
+### AI 讲解的对话模型（默认智谱，免费）
 
-「AI 讲解」由 OpenCode Go 订阅驱动。`leetnote-ai` 启动时若 `CHAT_API_KEY` 为空，
-会**自动从本机 opencode 凭据库**读 key（顺序：`~/.local/share/opencode/auth.json` 的
-`opencode-go.key` → 同目录 `opencode.db` 的 `credential` 表，`integration_id LIKE 'opencode%'
-AND active=1`），所以本机开箱即用。
+「AI 讲解」的对话模型默认指向 **智谱 `glm-4.7-flash`（永久免费）**，在
+`leetnote-ai/.env` 里填 `CHAT_API_KEY`（智谱控制台申请）即可：
 
-- 只读，不进日志明文（日志只报「发现/未发现」与 key 来源）。
-- 想用另一把 key：在 `leetnote-ai/.env` 里显式设 `CHAT_API_KEY`（优先于自动发现）。
-- `CHAT_BASE_URL` / `CHAT_MODEL` 留空会回退到默认（OpenCode Go 端点 + `deepseek-v4.1-flash`）。
-- 验证：`curl http://127.0.0.1:8000/health` 应见 `"chat_enabled": true`。
+```dotenv
+CHAT_API_KEY=你的智谱key
+CHAT_BASE_URL=https://open.bigmodel.cn/api/paas/v4
+CHAT_MODEL=glm-4.7-flash
+```
+
+**改用 OpenCode Go 时**（`CHAT_BASE_URL=https://opencode.ai/zen/go/v1`）：`CHAT_API_KEY`
+可留空，服务会**自动从本机 opencode 凭据库**读 key（顺序：`auth.json` 的 `opencode-go.key`
+→ `opencode.db` 的 `credential` 表）。自动发现**只在 base_url 指向 `opencode.ai` 时生效**，
+避免把 OpenCode Go 的 key 误发到别的平台；此时会话头 `x-opencode-session` 也会自动补上。
+
+- 只读；日志只报「发现/未发现」与 key 来源，不打明文。
+- 验证：`curl http://127.0.0.1:8000/health` 见 `"chat_enabled": true`。
 
 ---
 

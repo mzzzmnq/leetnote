@@ -63,53 +63,52 @@ curl http://127.0.0.1:8000/health
 
 与 embedding **分开配置** —— 两者常常来自不同供应商。
 
-### 用 OpenCode Go 订阅（推荐，本机已配好）
+### 默认：智谱 GLM-4.7-Flash（永久免费）
 
-OpenCode Go 是 $10/月的订阅，包含多种开源编码模型。**它允许第三方客户端调用**，
-但有三条要求（[官方说明](https://opencode.ai/docs/go/#where-can-i-use-it)）：
+智谱的 **`glm-4.7-flash`** 是 30B 级、**永久免费**、面向编码/Agent 优化的模型，
+国内直连、中文讲解质量好，作为默认最省心。
+
+1. 去 <https://open.bigmodel.cn/> 注册并实名，创建一个 **API Key**。
+2. 在 `.env` 里填：
+
+```dotenv
+CHAT_API_KEY=你的智谱key
+CHAT_BASE_URL=https://open.bigmodel.cn/api/paas/v4
+CHAT_MODEL=glm-4.7-flash
+CHAT_USER_AGENT=leetnote-ai/0.1.0
+CHAT_SESSION_HEADER=
+```
+
+> `CHAT_BASE_URL` / `CHAT_MODEL` 留空会回退到上面的默认值，不会被空字符串覆盖。
+
+### 改用 OpenCode Go 订阅（$10/月，也含免费模型）
+
+OpenCode Go **允许第三方客户端调用**，但有三条要求
+（[官方说明](https://opencode.ai/docs/go/#where-can-i-use-it)）：
 
 1. 发送正常的编码 agent 流量
 2. 用**自己的** User-Agent 标识，不能是通用 SDK / HTTP 库的名字
 3. 每个会话带稳定的会话 ID 头 `x-opencode-session`
 
-> ⚠️ 第 3 条是硬性要求，**不带会直接返回 503**：
-> `Request is missing x-opencode-session and cannot be routed efficiently`
-
-**拿到 API Key**：TUI 里执行 `/connect` → 选 `OpenCode Go` → 粘贴 Key。
-
-**配置**（`.env`）：**key 可以留空** —— 服务启动时会自动从本机 opencode 凭据库
-（`~/.local/share/opencode/` 下的 `opencode.db` 的 `credential` 表，或 `auth.json` 的
-`opencode-go.key`）读出来，适合本机个人使用，零配置。
+> ⚠️ 第 3 条是硬性要求，**不带会直接返回 503**。代码会在 base_url 指向
+> `opencode.ai` 时**自动补上**这个头，`CHAT_SESSION_HEADER` 留空即可。
 
 ```dotenv
-# 留空 = 自动发现本机 opencode 的 OpenCode Go key；想用别的 key 再显式填
+# key 可留空 —— 服务会从本机 opencode 凭据库自动读取（仅当 base_url 是 opencode.ai）
 CHAT_API_KEY=
 CHAT_BASE_URL=https://opencode.ai/zen/go/v1
-CHAT_MODEL=deepseek-v4.1-flash
-
-# 上面两条要求由这两个配置满足；换成别的供应商时留空即可
-CHAT_USER_AGENT=leetnote-ai/0.1.0
-CHAT_SESSION_HEADER=x-opencode-session
+CHAT_MODEL=longcat-2.5-preview-free   # 免费；或 deepseek-v4.1-flash 等
 ```
 
-> `.env` 里把 `CHAT_BASE_URL` / `CHAT_MODEL` 留空也安全：会回退到默认值
-> （OpenCode Go 端点 + `deepseek-v4.1-flash`），不会被空字符串覆盖。
-> 显式填了 `CHAT_API_KEY` 则优先用它，不再自动发现。
+**OpenCode Go 的两个免费模型**：`longcat-2.5-preview-free`（推理模型，要给足
+`max_tokens`）、`step-5-preview-free`（实测偶发 `Endpoint is unavailable`）。
 
-**选模型的注意点**：
+**端点协议**：本客户端只支持走 OpenAI 兼容 `/chat/completions` 的模型；`qwen`/`minimax`
+走 `/messages`、`gpt`/`grok` 走 `/responses`，都不支持。
 
-| 模型 | 端点风格 | 备注 |
-|---|---|---|
-| `deepseek-v4.1-flash` | `/chat/completions` | 默认；便宜、中文质量好，但是**推理模型** |
-| `space-bunny` | `/chat/completions` | 免费额度模型（原名 `space-bunny-free` 已下线） |
-| `qwen3.8-flash` / `minimax-m3` | `/messages`（Anthropic 风格） | 本客户端不支持 |
-| `gpt-6-luna` / `grok-4.7` | `/responses` | 本客户端不支持 |
-
-> 可用模型以 `GET /v1/models` 为准（本机自动发现 key 后可查询）。
-
-> **推理模型的坑**：`deepseek` 系列会先产出一大段 reasoning。如果 `max_tokens`
-> 太小，正文会被挤成空字符串（`completion_tokens` 正好等于上限就是被截断的信号）。
-> 客户端已经把默认值放宽到 4000，并且在遇到空内容时明确报错而不是返回空白。
+> **推理模型的坑**：`deepseek` / `longcat` 等会先产出一大段 reasoning，`max_tokens`
+> 太小会把正文挤成空字符串（`completion_tokens` 等于上限就是被截断的信号）。
+> 客户端默认放宽到 4000，并在遇到空内容时明确报错而不是返回空白。
 
 ### 换成其他供应商
 

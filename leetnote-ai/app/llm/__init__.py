@@ -15,15 +15,15 @@ logger = logging.getLogger(__name__)
 
 
 def build_chat_client(settings: Settings) -> ChatClient | None:
-    """按「环境变量 → 本机自动发现 → 不可用」的顺序取 key，构建对话模型客户端。
+    """按「环境变量 → （仅 OpenCode Go）本机自动发现 → 不可用」取 key，构建对话模型客户端。
 
-    【为什么自动发现】LeetNote 的 AI 讲解由 OpenCode Go 订阅驱动，而 opencode
-    已把 key 存在本机凭据库里。对个人本机使用，再让人手填一遍 .env 是多余的。
-    显式的 CHAT_API_KEY 仍然优先，方便在多机/多账号场景覆盖。
+    默认端点是智谱 GLM-4.7-Flash（免费）。自动发现只对 OpenCode Go 生效 ——
+    否则会把 OpenCode Go 的 key 发到智谱等平台上，既不安全也没意义。
     """
     api_key = settings.chat_api_key.strip()
     source = "环境变量 CHAT_API_KEY"
-    if not api_key:
+
+    if not api_key and settings.uses_opencode_go:
         discovered = discover_local_api_key()
         if discovered:
             api_key = discovered
@@ -31,10 +31,16 @@ def build_chat_client(settings: Settings) -> ChatClient | None:
 
     if not api_key:
         logger.warning(
-            "未配置对话模型：CHAT_API_KEY 为空且本机未发现 OpenCode Go key，"
-            "LLM 相关功能（解法讲解）不可用"
+            "未配置对话模型：CHAT_API_KEY 为空（端点 %s），AI 讲解不可用。"
+            "请在 leetnote-ai/.env 里填对应平台的 key。",
+            settings.effective_chat_base_url,
         )
         return None
+
+    session_header = settings.chat_session_header.strip()
+    if not session_header and settings.uses_opencode_go:
+        # OpenCode Go 不带这个头会直接 503
+        session_header = "x-opencode-session"
 
     logger.info(
         "对话模型已启用: %s (base_url=%s, key 来源=%s)",
@@ -47,7 +53,7 @@ def build_chat_client(settings: Settings) -> ChatClient | None:
         api_key=api_key,
         model=settings.effective_chat_model,
         user_agent=settings.chat_user_agent,
-        session_header=settings.chat_session_header,
+        session_header=session_header,
     )
 
 

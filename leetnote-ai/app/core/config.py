@@ -7,10 +7,17 @@ from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# 对话模型的默认端点与模型（OpenCode Go 订阅）。
+# 对话模型的默认端点与模型。
+# 默认用【智谱 GLM-4.7-Flash】—— 永久免费、国内直连、编码/中文都强。
 # .env 里把这两项留空时回退到这里，避免「空字符串覆盖了默认值」导致 base_url=""。
-DEFAULT_CHAT_BASE_URL = "https://opencode.ai/zen/go/v1"
-DEFAULT_CHAT_MODEL = "deepseek-v4.1-flash"
+DEFAULT_CHAT_BASE_URL = "https://open.bigmodel.cn/api/paas/v4"
+DEFAULT_CHAT_MODEL = "glm-4.7-flash"
+
+# OpenCode Go 订阅的端点。它不是默认值，但代码里有几处需要按供应商特判：
+#   - 两个硬性要求（自带 User-Agent + 稳定的 x-opencode-session 头）
+#   - key 可以从本机 opencode 凭据库里自动发现
+# 见 app/llm/__init__.py 与 app/llm/discovery.py。
+OPENCODE_GO_BASE_URL = "https://opencode.ai/zen/go/v1"
 
 
 class Settings(BaseSettings):
@@ -36,12 +43,12 @@ class Settings(BaseSettings):
     # 换用维度不同的模型时需要先做一次迁移改列类型。
     embedding_dim: int = 1536
 
-    # ---------- 对话模型（LLM 生成讲解 / 复习卡）----------
+    # ---------- 对话模型（LLM 生成讲解）----------
     # 与 embedding 分开配置：两者常常来自不同供应商。
-    # 默认指向 OpenCode Go（见下方说明）。
+    # 默认指向【智谱 GLM-4.7-Flash】（免费）；改成 OpenCode Go 只需换 base_url + model。
     chat_api_key: str = ""
-    chat_base_url: str = "https://opencode.ai/zen/go/v1"
-    chat_model: str = "space-bunny-free"
+    chat_base_url: str = "https://open.bigmodel.cn/api/paas/v4"
+    chat_model: str = "glm-4.7-flash"
 
     # OpenCode Go 对第三方客户端有两条硬性要求
     # （见 https://opencode.ai/docs/go/#where-can-i-use-it）：
@@ -49,9 +56,10 @@ class Settings(BaseSettings):
     #   2. 每个会话带稳定的会话 ID，服务端据此优化路由与 prompt 缓存
     #      不带这个头会直接返回 503 "Request is missing x-opencode-session"
     #
-    # 换成其他供应商时把这两个值留空即可，客户端会自动跳过。
+    # 智谱等其它供应商不需要这两条。默认留空；
+    # 若 base_url 指向 OpenCode Go，工厂会自动补上 x-opencode-session（见 llm/__init__.py）。
     chat_user_agent: str = "leetnote-ai/0.1.0"
-    chat_session_header: str = "x-opencode-session"
+    chat_session_header: str = ""
 
     # 检索返回的相似题数量上限
     similar_limit_default: int = 5
@@ -75,13 +83,23 @@ class Settings(BaseSettings):
 
     @property
     def effective_chat_base_url(self) -> str:
-        """有效端点：.env 留空则回退到 OpenCode Go 默认值。"""
+        """有效端点：.env 留空则回退到默认值（智谱）。"""
         return self.chat_base_url.strip() or DEFAULT_CHAT_BASE_URL
 
     @property
     def effective_chat_model(self) -> str:
-        """有效模型：.env 留空则回退到默认模型。"""
+        """有效模型：.env 留空则回退到默认模型（GLM-4.7-Flash）。"""
         return self.chat_model.strip() or DEFAULT_CHAT_MODEL
+
+    @property
+    def uses_opencode_go(self) -> bool:
+        """当前对话端点是不是 OpenCode Go。
+
+        OpenCode Go 需要额外的会话头，且 key 可从本机 opencode 凭据自动发现；
+        其它供应商（如智谱）不需要 —— 判断依据只看端点主机，避免把
+        OpenCode Go 的 key 误发给别的平台。
+        """
+        return "opencode.ai" in self.effective_chat_base_url.lower()
 
     @property
     def is_production(self) -> bool:

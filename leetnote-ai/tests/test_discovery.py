@@ -65,15 +65,45 @@ def test_discover_returns_none_when_absent(tmp_path: Path) -> None:
     ) is None
 
 
-def test_build_chat_client_uses_discovery_when_env_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+OPENCODE_BASE = "https://opencode.ai/zen/go/v1"
+ZHIPU_BASE = "https://open.bigmodel.cn/api/paas/v4"
+
+
+def test_build_chat_client_discovers_key_for_opencode(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("app.llm.discover_local_api_key", lambda *a, **k: "oc_sk_discovered")
 
-    settings = Settings(chat_api_key="", chat_base_url="", chat_model="")
+    settings = Settings(chat_api_key="", chat_base_url=OPENCODE_BASE, chat_model="some-model")
     client = build_chat_client(settings)
 
     assert client is not None
-    # .env 留空时应回退到默认模型
-    assert client.model == DEFAULT_CHAT_MODEL
+
+
+def test_build_chat_client_does_not_discover_for_other_providers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called = {"n": 0}
+
+    def fake(*args, **kwargs):  # noqa: ANN002, ANN003
+        called["n"] += 1
+        return "oc_sk_discovered"
+
+    monkeypatch.setattr("app.llm.discover_local_api_key", fake)
+
+    # 端点不是 OpenCode Go 时：没有 key 就是不可用，且【不能】去读 opencode 凭据
+    settings = Settings(chat_api_key="", chat_base_url=ZHIPU_BASE, chat_model="glm-4.7-flash")
+    assert build_chat_client(settings) is None
+    assert called["n"] == 0, "非 OpenCode Go 端点不该自动发现 key"
+
+
+def test_build_chat_client_default_model_is_zhipu(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("app.llm.discover_local_api_key", lambda *a, **k: None)
+
+    settings = Settings(chat_api_key="k", chat_base_url="", chat_model="")
+    client = build_chat_client(settings)
+
+    assert client is not None
+    # 默认模型应当是智谱的免费模型
+    assert client.model == DEFAULT_CHAT_MODEL == "glm-4.7-flash"
 
 
 def test_build_chat_client_prefers_explicit_env_key(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -85,7 +115,7 @@ def test_build_chat_client_prefers_explicit_env_key(monkeypatch: pytest.MonkeyPa
 
     monkeypatch.setattr("app.llm.discover_local_api_key", fake)
 
-    settings = Settings(chat_api_key="oc_sk_explicit", chat_model="some-model")
+    settings = Settings(chat_api_key="zhipu_key", chat_model="some-model")
     client = build_chat_client(settings)
 
     assert client is not None
@@ -97,3 +127,17 @@ def test_build_chat_client_disabled_without_any_key(monkeypatch: pytest.MonkeyPa
 
     settings = Settings(chat_api_key="", chat_model="")
     assert build_chat_client(settings) is None
+
+
+def test_opencode_gets_session_header_automatically(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("app.llm.discover_local_api_key", lambda *a, **k: None)
+
+    settings = Settings(
+        chat_api_key="k", chat_base_url=OPENCODE_BASE, chat_model="m", chat_session_header=""
+    )
+    client = build_chat_client(settings)
+
+    assert client is not None
+    # OpenCode Go 不带这个头会 503，所以即使 .env 留空也要自动补上
+    assert client._session_header == "x-opencode-session"
+
